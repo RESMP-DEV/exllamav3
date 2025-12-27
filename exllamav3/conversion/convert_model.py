@@ -71,29 +71,36 @@ def get_adaptive_block_size(linear, user_block_size):
         user_block_size: User-specified block size (None for automatic)
         
     Returns:
-        Block size to use (must be multiple of 16)
+        Block size to use (must be multiple of 16 and not exceed tensor size)
     """
     # If user explicitly set block size, use it
     if user_block_size is not None:
         return user_block_size
     
     # Check if this is an expert layer
-    is_expert = "experts." in linear.key or ".experts." in linear.key
+    is_expert = "experts." in linear.key
     
     if is_expert:
         # For expert layers, use tensor size to determine optimal block size
-        # Experts are typically small, so larger block sizes work well
+        # Experts are typically small, so we can use larger block sizes
         tensor_rows = linear.in_features
         
-        # Use the entire tensor as block size (up to reasonable limit)
+        # Use up to 512 as block size (capped by tensor size)
         # This maximizes parallelism for small expert matrices
-        adaptive_size = min(tensor_rows, 512)
+        block_size = min(tensor_rows, 512)
         
         # Round down to multiple of 16
-        adaptive_size = (adaptive_size // 16) * 16
+        block_size = (block_size // 16) * 16
         
-        # Ensure minimum of 128 (or tensor size if smaller)
-        return max(min(adaptive_size, tensor_rows), 128)
+        # Ensure at least 16 (LDLQ minimum)
+        block_size = max(block_size, 16)
+        
+        # For expert tensors < 128 rows, use the rounded tensor size
+        # For larger expert tensors, use at least 128 (the default) up to 512
+        if tensor_rows < 128:
+            return block_size
+        else:
+            return max(block_size, 128)
     
     # Default block size for non-expert layers
     return 128
