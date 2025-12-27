@@ -59,6 +59,46 @@ curr_progress = 0
 max_progress = 0
 
 
+def get_adaptive_block_size(linear, user_block_size):
+    """
+    Determine optimal block size for LDLQ quantization.
+    
+    For expert layers (small tensors), automatically use a larger block size
+    to improve GPU utilization without degrading quality.
+    
+    Args:
+        linear: Linear layer to quantize
+        user_block_size: User-specified block size (None for automatic)
+        
+    Returns:
+        Block size to use (must be multiple of 16)
+    """
+    # If user explicitly set block size, use it
+    if user_block_size is not None:
+        return user_block_size
+    
+    # Check if this is an expert layer
+    is_expert = "experts." in linear.key or ".experts." in linear.key
+    
+    if is_expert:
+        # For expert layers, use tensor size to determine optimal block size
+        # Experts are typically small, so larger block sizes work well
+        tensor_rows = linear.in_features
+        
+        # Use the entire tensor as block size (up to reasonable limit)
+        # This maximizes parallelism for small expert matrices
+        adaptive_size = min(tensor_rows, 512)
+        
+        # Round down to multiple of 16
+        adaptive_size = (adaptive_size // 16) * 16
+        
+        # Ensure minimum of 128 (or tensor size if smaller)
+        return max(min(adaptive_size, tensor_rows), 128)
+    
+    # Default block size for non-expert layers
+    return 128
+
+
 class PrefetchManager:
     """
     Async prefetcher that loads next module's weights to CPU while current module is being quantized.
@@ -597,14 +637,17 @@ def main(args, job_state):
                     global curr_progress
 
                     for linear in dev_linears:
+                        # Determine optimal block size (adaptive for experts)
+                        adaptive_block_size = get_adaptive_block_size(linear, args["block_size"])
+                        
                         quant_args_local = {
                             "seed": idx,
                             "K": strategy[linear.key],
                             "devices": [device_idx],
                             "apply_out_scales": args["apply_out_scales"],
                         }
-                        if args["block_size"] is not None:
-                            quant_args_local.update({ "buf_size_k": args["block_size"] })
+                        if adaptive_block_size is not None:
+                            quant_args_local.update({ "buf_size_k": adaptive_block_size })
                         if args["codebook"] == "mcg": quant_args_local.update({ "mcg": True })
                         elif args["codebook"] == "mul1": quant_args_local.update({ "mul1": True })
 
@@ -660,6 +703,9 @@ def main(args, job_state):
             # Quantize module, single GPU or tensor split
             else:
                 for linear in linears:
+                    # Determine optimal block size (adaptive for experts)
+                    adaptive_block_size = get_adaptive_block_size(linear, args["block_size"])
+                    
                     quant_args = {
                         "seed": idx,
                         "K": strategy[linear.key],
@@ -667,8 +713,8 @@ def main(args, job_state):
                         "device_ratios": device_ratios,
                         "apply_out_scales": args["apply_out_scales"],
                     }
-                    if args["block_size"] is not None:
-                        quant_args.update({ "buf_size_k": args["block_size"] })
+                    if adaptive_block_size is not None:
+                        quant_args.update({ "buf_size_k": adaptive_block_size })
                     if args["codebook"] == "mcg": quant_args.update({ "mcg": True })
                     elif args["codebook"] == "mul1": quant_args.update({ "mul1": True })
 
