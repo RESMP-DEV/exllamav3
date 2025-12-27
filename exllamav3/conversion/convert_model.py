@@ -43,6 +43,7 @@ parser.add_argument("-cb", "--codebook", type = str, default = "mcg", help = "Co
 parser.add_argument("-strat", "--strategy", type = str, default = None, help = "Modifiers for quantization strategy - EXPERIMENTAL")
 parser.add_argument("-pm", "--parallel_mode", action = "store_true", help = "When possible, use new parallel mode for small tensors (MoE layers especially)")
 parser.add_argument("-pf", "--prefetch", action = "store_true", help = "Prefetch next module weights to CPU while quantizing current module")
+parser.add_argument("-bs", "--block_size", type = int, default = None, help = "LDLQ block size (must be multiple of 16). Larger values increase parallelism per GPU but may reduce quality. Default: 128")
 
 group = parser.add_mutually_exclusive_group()
 group.add_argument("--out_scales", dest = "out_scales_", action = "store_true", help = "Always enable out channel scales  (for debug purposes)")
@@ -291,6 +292,7 @@ def prepare(args) -> (dict, dict, bool, str):
         ("strategy", False, ""),
         ("parallel_mode", True, False),
         ("prefetch", True, False),
+        ("block_size", True, None),
     ]:
         override(arg_, can_override if not args.override_anyway else True, default)
 
@@ -298,6 +300,13 @@ def prepare(args) -> (dict, dict, bool, str):
     in_args["image_dump"] = args.image_dump
     in_args["verbose"] = args.verbose
     in_args["apply_out_scales"] = args.out_scales_
+
+    # Validate block_size
+    if in_args["block_size"] is not None:
+        if in_args["block_size"] % 16 != 0:
+            return None, None, False, f"Block size must be a multiple of 16, got: {in_args['block_size']}"
+        if in_args["block_size"] < 16:
+            return None, None, False, f"Block size must be at least 16, got: {in_args['block_size']}"
 
     if args.resume:
         job_state = load_dict("ckpt/job.json", in_args)
@@ -594,6 +603,8 @@ def main(args, job_state):
                             "devices": [device_idx],
                             "apply_out_scales": args["apply_out_scales"],
                         }
+                        if args["block_size"] is not None:
+                            quant_args_local.update({ "buf_size_k": args["block_size"] })
                         if args["codebook"] == "mcg": quant_args_local.update({ "mcg": True })
                         elif args["codebook"] == "mul1": quant_args_local.update({ "mul1": True })
 
@@ -656,6 +667,8 @@ def main(args, job_state):
                         "device_ratios": device_ratios,
                         "apply_out_scales": args["apply_out_scales"],
                     }
+                    if args["block_size"] is not None:
+                        quant_args.update({ "buf_size_k": args["block_size"] })
                     if args["codebook"] == "mcg": quant_args.update({ "mcg": True })
                     elif args["codebook"] == "mul1": quant_args.update({ "mul1": True })
 

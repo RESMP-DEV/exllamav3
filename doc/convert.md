@@ -35,6 +35,8 @@ does.
 
 - **-pm / --parallel_mode**: Fully parallelize quantization across multiple GPUs when possible. By default, multi-GPU quantization works by splitting the trellis encoding workload across multiple devices. For models with many small tensors (especially MoE models) this is inefficient since the resulting tile slices end up being too small for efficient batched encoding. This mode prefers distributing one linear layer to each GPU at a time, allowing larger encoding batches and more overall throughput. This mode is still somewhat experimental but will likely become the default soon.     
 
+- **-bs / --block_size *int***: LDLQ block size (must be a multiple of 16). Controls how many rows of tiles are processed per iteration during quantization. Larger values increase parallelism per GPU, which can improve performance for small tensors (like MoE expert layers), but may reduce quality. Default is 128. Experiment with larger values (e.g., 256, 512) for better GPU utilization on small tensors.
+
 #### Debug stuff (ignore these)
 
 - **-lcpi / --last_checkpoint_index *int***: If specified, don't save checkpoints after this module index.
