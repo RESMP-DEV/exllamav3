@@ -92,15 +92,12 @@ def get_adaptive_block_size(linear, user_block_size):
         # Round down to multiple of 16
         block_size = (block_size // 16) * 16
         
-        # Ensure at least 16 (LDLQ minimum)
-        block_size = max(block_size, 16)
-        
-        # For expert tensors < 128 rows, use the rounded tensor size
-        # For larger expert tensors, use at least 128 (the default) up to 512
-        if tensor_rows < 128:
-            return block_size
-        else:
+        # Ensure minimum of 128 for expert tensors >= 128 rows
+        # For smaller expert tensors, use at least 16 but don't exceed tensor size
+        if tensor_rows >= 128:
             return max(block_size, 128)
+        else:
+            return max(block_size, 16)
     
     # Default block size for non-expert layers
     return 128
@@ -652,9 +649,8 @@ def main(args, job_state):
                             "K": strategy[linear.key],
                             "devices": [device_idx],
                             "apply_out_scales": args["apply_out_scales"],
+                            "buf_size_k": adaptive_block_size,
                         }
-                        if adaptive_block_size is not None:
-                            quant_args_local.update({ "buf_size_k": adaptive_block_size })
                         if args["codebook"] == "mcg": quant_args_local.update({ "mcg": True })
                         elif args["codebook"] == "mul1": quant_args_local.update({ "mul1": True })
 
@@ -719,9 +715,8 @@ def main(args, job_state):
                         "devices": devices,
                         "device_ratios": device_ratios,
                         "apply_out_scales": args["apply_out_scales"],
+                        "buf_size_k": adaptive_block_size,
                     }
-                    if adaptive_block_size is not None:
-                        quant_args.update({ "buf_size_k": adaptive_block_size })
                     if args["codebook"] == "mcg": quant_args.update({ "mcg": True })
                     elif args["codebook"] == "mul1": quant_args.update({ "mul1": True })
 
