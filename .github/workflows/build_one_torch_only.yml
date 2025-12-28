@@ -101,6 +101,7 @@ jobs:
       - name: Install the latest version of uv and set the python version
         uses: astral-sh/setup-uv@v5
         with:
+          enable-cache: true
           python-version: ${{ matrix.pyver }}
 
       - name: Install Windows CUDA 12.8
