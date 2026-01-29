@@ -43,7 +43,7 @@ parser.add_argument("-cb", "--codebook", type = str, default = "mcg", help = "Co
 parser.add_argument("-strat", "--strategy", type = str, default = None, help = "Modifiers for quantization strategy - EXPERIMENTAL")
 parser.add_argument("-pm", "--parallel_mode", action = "store_true", help = "When possible, use new parallel mode for small tensors (MoE layers especially)")
 parser.add_argument("-pf", "--prefetch", action = "store_true", help = "Prefetch next module weights to CPU while quantizing current module")
-parser.add_argument("-bs", "--block_size", type = int, default = None, help = "LDLQ block size (must be multiple of 16). Larger values increase parallelism per GPU but may reduce quality. Default: 128")
+parser.add_argument("-bs", "--block_size", type = int, default = None, help = "LDLQ block size (must be multiple of 16). Larger values increase parallelism per GPU but may reduce quality. Default: adaptive (128 for regular layers, up to 512 for expert layers based on out_features)")
 
 group = parser.add_mutually_exclusive_group()
 group.add_argument("--out_scales", dest = "out_scales_", action = "store_true", help = "Always enable out channel scales  (for debug purposes)")
