@@ -71,7 +71,7 @@ def get_adaptive_block_size(linear, user_block_size):
         user_block_size: User-specified block size (None for automatic)
         
     Returns:
-        Block size to use (must be multiple of 16 and not exceed tensor size)
+        Block size to use (must be multiple of 16 and divide out_features)
     """
     # If user explicitly set block size, use it
     if user_block_size is not None:
@@ -83,18 +83,19 @@ def get_adaptive_block_size(linear, user_block_size):
     if is_expert:
         # For expert layers, use tensor size to determine optimal block size
         # Experts are typically small, so we can use larger block sizes
-        tensor_rows = linear.in_features
+        # Block size must divide out_features due to quantize.py assertion
+        tensor_cols = linear.out_features
         
         # Use up to 512 as block size (capped by tensor size)
         # This maximizes parallelism for small expert matrices
-        block_size = min(tensor_rows, 512)
+        block_size = min(tensor_cols, 512)
         
         # Round down to multiple of 16
         block_size = (block_size // 16) * 16
         
-        # Ensure minimum of 128 for expert tensors >= 128 rows
+        # Ensure minimum of 128 for expert tensors >= 128 cols
         # For smaller expert tensors, use at least 16 but don't exceed tensor size
-        if tensor_rows >= 128:
+        if tensor_cols >= 128:
             return max(block_size, 128)
         else:
             return max(block_size, 16)
