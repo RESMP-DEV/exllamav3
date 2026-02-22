@@ -641,7 +641,6 @@ class PageTable:
         all_rotations_cpu = torch.tensor(all_rotations, dtype = torch.int)
         @lru_cache
         def get_all_rotations(device):
-            nonlocal all_rotations_cpu
             return all_rotations_cpu.to(device)
 
         @lru_cache
@@ -667,7 +666,6 @@ class PageTable:
             build_root_pages()
 
             def dbg_walk(l, p):
-                nonlocal walks
                 l = l + [p]
                 if not p.children:
                     walks.append(l)

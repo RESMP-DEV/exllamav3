@@ -62,8 +62,6 @@ class MMEmbedding:
             self.token_list = None
             return
 
-        global global_allocator
-
         if deepstack_embeddings is not None:
             assert all(de.shape == embeddings.shape for de in deepstack_embeddings), \
                 "Deepstack embeddings shape mismatch"

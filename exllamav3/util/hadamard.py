@@ -5,7 +5,7 @@ from functools import lru_cache
 from ..ext import exllamav3_ext as ext
 
 had_dict: dict[int: torch.Tensor] | None = {}
-primes: set[int]
+primes: set[int] = set()
 
 def load_constants():
     global had_dict, primes
@@ -106,7 +106,6 @@ def paley2(n: int):
 
 @lru_cache(maxsize = 100)
 def get_hadamard(n: int):
-    global had_dict, primes
 
     if not had_dict:
         load_constants()

@@ -123,7 +123,6 @@ def main(args):
 
     # Evaluate
     def print_results(p_subject):
-        nonlocal dataset_all, n_sample
         total = 0
         correct = 0
         confidence_sum = 0.0

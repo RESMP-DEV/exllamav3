@@ -13,7 +13,6 @@ def dbg_timezero(s: str):
 
 @lru_cache
 def dbg_enabled(s: str, t0 = None):
-    global global_t0
     v = "EXLLAMA_DEBUGLOG_" + s.upper()
     if v in os.environ:
         return global_t0

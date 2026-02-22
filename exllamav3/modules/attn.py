@@ -617,7 +617,6 @@ class Attention(Module):
         assert self.device is not None, "Cannot export module for TP before loading."
 
         def _export(child):
-            nonlocal producer
             return child.tp_export(plan, producer) if child is not None else None
 
         return {
@@ -679,7 +678,6 @@ class Attention(Module):
         #         if exported.get(name) else None
 
         def _import_split(name, split):
-            nonlocal exported, plan
             return exported[name]["cls"].tp_import_split(local_context, exported[name], plan, split) \
                 if split and exported.get(name) else None
 

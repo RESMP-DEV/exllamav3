@@ -265,7 +265,6 @@ class MLP(Module):
         assert self.pad_to == 128, "Cannot export module for TP unless pad_to == 128."
 
         def _export(child):
-            nonlocal producer
             return child.tp_export(plan, producer) if child is not None else None
 
         return {
@@ -299,12 +298,10 @@ class MLP(Module):
             num_slices = 0
 
         def _import_i_split(name, i, split):
-            nonlocal exported, plan
             return exported[name][i]["cls"].tp_import_split(local_context, exported[name][i], plan, split) \
                 if exported.get(name) else None
 
         def _import_i(name, i):
-            nonlocal exported, plan
             return exported[name][i]["cls"].tp_import(local_context, exported[name][i], plan) \
                 if exported.get(name) else None
 
@@ -690,7 +687,6 @@ class GatedMLP(Module):
         assert self.pad_to == 128, "Cannot export module for TP unless pad_to == 128."
 
         def _export(child):
-            nonlocal producer
             return child.tp_export(plan, producer) if child is not None else None
 
         return {
@@ -722,12 +718,10 @@ class GatedMLP(Module):
             num_slices = 0
 
         def _import_i_split(name, i, split):
-            nonlocal exported, plan
             return exported[name][i]["cls"].tp_import_split(local_context, exported[name][i], plan, split) \
                 if exported.get(name) else None
 
         def _import_i(name, i):
-            nonlocal exported, plan
             return exported[name][i]["cls"].tp_import(local_context, exported[name][i], plan) \
                 if exported.get(name) else None
 
