@@ -26,11 +26,9 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m ensurepip --upgrade
-          python -m pip install --upgrade pip
-          pip install flake8 pytest
-          pip install torch --index-url https://download.pytorch.org/whl/cpu
-          if [ -f requirements.txt ]; then grep -v "flash_attn" requirements.txt | pip install -r /dev/stdin; fi
+          uv pip install --system flake8 pytest
+          uv pip install --system torch --index-url https://download.pytorch.org/whl/cpu
+          if [ -f requirements.txt ]; then grep -v "flash_attn" requirements.txt | uv pip install --system -r /dev/stdin; fi
 
       - name: Lint with flake8
         run: |
