@@ -67,7 +67,6 @@ class Module(ABC):
             module.unload()
 
     def prepare_for_device(self, x: torch.Tensor, params: dict) -> torch.Tensor:
-        global no_p2p_copy
         if x.device != self.device:
             if no_p2p_copy:
                 x = x.cpu().to(self.device)

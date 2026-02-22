@@ -127,7 +127,6 @@ class TPAllocator:
     def print_split(self):
         n_columns = len(self.estimate_total)
         def _divider():
-            nonlocal n_columns
             print("    " + "-" * (62 + 10 * n_columns))
         def _columns(t, u, d):
             print(f"    {t:<50}{u:<12}" + "".join([f"{d_:>10}" for d_ in d]))

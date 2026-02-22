@@ -270,7 +270,6 @@ def main(args, job_state):
         s_targets = []
 
         def flatten(node, maxdepth, depth=0):
-            nonlocal s_targets
             l = []
             for n in node:
                 if isinstance(n, str):

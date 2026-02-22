@@ -157,13 +157,13 @@ class CacheVisualizer:
             x, y = _x, _y
 
         def line(_x, _y):
-            nonlocal x, y, col
+            nonlocal x, y
             aid = self.canvas.create_line(x, y, _x, _y, fill = col, width = 2.0)
             self.elements.append(aid)
             x, y = _x, _y
 
         def arrow(_x, _y):
-            nonlocal x, y, col
+            nonlocal x, y
             aid = self.canvas.create_line(x, y, _x, _y, arrow = 'last', tags = ("arrow",), fill = col, width = 2.0)
             self.elements.append(aid)
             x, y = _x, _y

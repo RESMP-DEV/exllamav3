@@ -786,7 +786,6 @@ class BlockSparseMLP(Module):
         assert self.device is not None, "Cannot export module for TP before loading."
 
         def _export(child):
-            nonlocal producer
             return child.tp_export(plan, producer) if child is not None else None
 
         return {
@@ -825,22 +824,18 @@ class BlockSparseMLP(Module):
         first, last, unit = plan[key]
 
         def _import(name):
-            nonlocal exported, plan
             return exported[name]["cls"].tp_import(local_context, exported[name], plan) \
                 if exported.get(name) else None
 
         def _import_no_reduce(name):
-            nonlocal exported, plan
             return exported[name]["cls"].tp_import(local_context, exported[name], plan, skip_reduction = True) \
                 if exported.get(name) else None
 
         def _import_i(name, i):
-            nonlocal exported, plan
             return exported[name][i]["cls"].tp_import(local_context, exported[name][i], plan) \
                 if exported.get(name) else None
 
         def _import_i_split(name, i, split):
-            nonlocal exported, plan
             return exported[name][i]["cls"].tp_import_split(local_context, exported[name][i], plan, split) \
                 if exported.get(name) else None
 

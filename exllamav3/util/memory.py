@@ -90,7 +90,6 @@ def list_gpu_tensors(min_size: int = 1, cuda_only: bool = True):
 
     # Helper function to filter and collect items
     def collect(path, item):
-        nonlocal results
 
         # Only collect CUDA tensors
         if not isinstance(item, torch.Tensor) or (cuda_only and not item.is_cuda):
