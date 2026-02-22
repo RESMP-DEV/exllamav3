@@ -4,20 +4,21 @@ import torch
 from ..model.config import Config, no_default
 from ..model.model import Model
 from ..util.rope import RopeStyle
-from ..modules import RMSNorm, Embedding, TransformerBlock, Attention, GatedMLP, Linear
+from ..modules import RMSNorm, Embedding, TransformerBlock, Attention, MLP, Linear
 from ..modules.attn import prepare_for_attn
 
-class Exaone4Config(Config):
-    arch_string = "Exaone4ForCausalLM"
+class NanoChatConfig(Config):
+    arch_string = "NanoChatForCausalLM"
 
     def __init__(
         self,
         directory: str,
+        derived_model: dict | None = None,
         **kwargs,
     ):
         super().__init__(
             directory,
-            {"text": Exaone4Model},
+            derived_model if derived_model else {"text": NanoChatModel},
             **kwargs
         )
 
@@ -26,69 +27,34 @@ class Exaone4Config(Config):
         self.hidden_size = self.read_cfg(int, "hidden_size", no_default)
         self.num_q_heads = self.read_cfg(int, "num_attention_heads", no_default)
         self.num_kv_heads = self.read_cfg(int, "num_key_value_heads", self.num_q_heads)
-        self.num_hidden_layers = self.read_cfg(int, "num_hidden_layers", no_default)
 
         if not self.head_dim:
             self.head_dim = self.hidden_size // self.num_q_heads
 
-        self.sliding_window = self.read_cfg(int, "sliding_window", -1)
-        self.sliding_window_pattern = self.read_cfg(str, "sliding_window_pattern", None)
-        layer_types = self.read_cfg(list, "layer_types", None)
-
-        if layer_types:
-            assert len(layer_types) == self.num_hidden_layers, \
-                "Length of layer_types key doesn't match number of hidden layers"
-            self.swa_pattern = []
-            for t in layer_types:
-                if t == "sliding_attention":
-                    if self.sliding_window < 0:
-                        raise ValueError(
-                            "layer_types requests sliding_attention but sliding_window is disabled"
-                        )
-                    self.swa_pattern.append(self.sliding_window)
-                elif t == "full_attention":
-                    self.swa_pattern.append(-1)
-                else:
-                    raise ValueError(f"Unknown layer type in layer_types: {t}")
-
-        elif self.sliding_window_pattern:
-            if self.sliding_window < 0:
-                raise ValueError(
-                    "sliding_window_pattern is set but sliding_window is disabled"
-                )
-            self.swa_pattern = [
-                self.sliding_window
-                if (
-                    idx != self.num_hidden_layers - 1
-                    and self.sliding_window_pattern[idx % len(self.sliding_window_pattern)] == "L"
-                )
-                else -1
-                for idx in range(self.num_hidden_layers)
-            ]
-
-        else:
-            self.swa_pattern = [-1 for _ in range(self.num_hidden_layers)]
-
         # MLP params
-        self.assert_cfg(str, "hidden_act", "silu", True)
+        self.assert_cfg(str, "hidden_act", "relu2", True)
         self.intermediate_size = self.read_cfg(int, "intermediate_size", no_default)
 
         # Norms
         self.rms_norm_eps = self.read_cfg(float, "rms_norm_eps", no_default)
 
         # Layers
+        self.num_hidden_layers = self.read_cfg(int, "num_hidden_layers", no_default)
         self.tie_word_embeddings = self.read_cfg(bool, "tie_word_embeddings", False)
 
         # RoPE
-        self.rope_settings = self.read_rope_settings_default(RopeStyle.NEOX)
+        self.rope_settings = self.read_rope_settings_default(RopeStyle.NANOCHAT)
+
+        # Output softcap
+        self.final_logit_softcapping = self.read_cfg(float, "final_logit_softcapping", 0.0)
 
 
-class Exaone4Model(Model):
-    config_class = Exaone4Config
+class NanoChatModel(Model):
+    config_class = NanoChatConfig
 
     def __init__(
         self,
-        config: Exaone4Config,
+        config: NanoChatConfig,
         **kwargs
     ):
         super().__init__(config, **kwargs)
@@ -99,7 +65,14 @@ class Exaone4Model(Model):
                 key = "model.embed_tokens",
                 vocab_size = config.vocab_size,
                 hidden_size = config.hidden_size,
-            )
+            ),
+            RMSNorm(
+                config = config,
+                key = "model.emb_norm",
+                rms_norm_eps = config.rms_norm_eps,
+                out_dtype = torch.float,
+                unweighted = True,
+            ),
         ]
 
         self.first_block_idx = len(self.modules)
@@ -108,6 +81,12 @@ class Exaone4Model(Model):
             TransformerBlock(
                 config = config,
                 key = f"model.layers.{idx}",
+                attn_norm = RMSNorm(
+                    config = config,
+                    key = f"model.layers.{idx}.input_layernorm",
+                    rms_norm_eps = config.rms_norm_eps,
+                    unweighted = True,
+                ),
                 attn = Attention(
                     config = config,
                     key = f"model.layers.{idx}.self_attn",
@@ -116,46 +95,34 @@ class Exaone4Model(Model):
                     head_dim = config.head_dim,
                     num_q_heads = config.num_q_heads,
                     num_kv_heads = config.num_kv_heads,
-                    rope_settings = config.rope_settings if config.swa_pattern[idx] >= 0 else None,
+                    rope_settings = config.rope_settings,
                     sm_scale = None,
-                    sliding_window = config.swa_pattern[idx],
                     key_q = "q_proj",
                     key_k = "k_proj",
                     key_v = "v_proj",
                     key_o = "o_proj",
                     qmap = "block.attn",
-                    q_norm = RMSNorm(
-                        config = config,
-                        key = f"model.layers.{idx}.self_attn.q_norm",
-                        rms_norm_eps = config.rms_norm_eps,
-                    ),
-                    k_norm = RMSNorm(
-                        config = config,
-                        key = f"model.layers.{idx}.self_attn.k_norm",
-                        rms_norm_eps = config.rms_norm_eps,
-                    ),
+                    out_dtype = torch.float,
+                    post_rope_norm = True
                 ),
-                attn_post_norm = RMSNorm(
+                mlp_norm = RMSNorm(
                     config = config,
                     key = f"model.layers.{idx}.post_attention_layernorm",
                     rms_norm_eps = config.rms_norm_eps,
+                    unweighted = True,
                 ),
-                mlp = GatedMLP(
+                mlp = MLP(
                     config = config,
                     key = f"model.layers.{idx}.mlp",
                     hidden_size = config.hidden_size,
                     intermediate_size = config.intermediate_size,
-                    key_up = "up_proj",
-                    key_gate = "gate_proj",
-                    key_down = "down_proj",
+                    key_up = "fc1",
+                    key_down = "fc2",
                     qmap = "block.mlp",
-                    interm_dtype = torch.half,
                     out_dtype = torch.float,
-                ),
-                mlp_post_norm = RMSNorm(
-                    config = config,
-                    key = f"model.layers.{idx}.post_feedforward_layernorm",
-                    rms_norm_eps = config.rms_norm_eps,
+                    interm_dtype = torch.float,
+                    activation_fn = "relu2",
+                    interm_scale = 50.0,
                 ),
             )
             for idx in range(config.num_hidden_layers)
@@ -173,6 +140,7 @@ class Exaone4Model(Model):
                 key = "model.norm",
                 rms_norm_eps = config.rms_norm_eps,
                 out_dtype = torch.half,
+                unweighted = True,
             ),
             Linear(
                 config = config,
@@ -182,7 +150,8 @@ class Exaone4Model(Model):
                 in_features = config.hidden_size,
                 out_features = config.vocab_size,
                 qmap = "block",
-                caps = {"logits_output": True}
+                caps = {"logits_output": True},
+                softcap = config.final_logit_softcapping
             )
         ]
 
@@ -197,11 +166,9 @@ class Exaone4Model(Model):
 
     @override
     def default_chat_prompt(self, prompt: str, system_prompt: str = None) -> str:
-        p = ""
+        p = "<|bos|>"
         if system_prompt:
-            p += "[|system|]\n"
-            p += f"{system_prompt}[|endofturn|]\n"
-        p += f"[|user|]\n"
-        p += f"{prompt}[|endofturn|]\n"
-        p += f"[|assistant|]\n"
+            p += f"{system_prompt}\n\n"
+        p += f"User: {prompt}\n\n"
+        p += f"Assistant:"
         return p

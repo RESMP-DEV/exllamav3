@@ -1,56 +1,79 @@
 import argparse
-import torch
-import time
+import json
+import os
+import shutil
 import sys
+import threading
+import time
+
+import torch
+
 from .. import Config, Model, Tokenizer
+from ..loader.safetensors_alt import safe_open, save_file
 from ..modules import Linear
-from ..modules.quant import LinearFP16, LinearEXL3
-from ..util.progress import ProgressBar
-from ..util.memory import free_mem
+from ..modules.quant import LinearEXL3, LinearFP16
 from ..util import Timer, human_time
-from ..util.tensor import save_tensor_image
 from ..util.measures import cosine_error, sqnr
+from ..util.progress import ProgressBar
+from ..util.tensor import save_tensor_image
 from .calibration_data import get_default_calibration
 from .compile import compile_model, dsize
-from safetensors.torch import save_file
-from safetensors import safe_open
-import os, shutil
-import json
-import threading
 
 col_default = "\u001b[0m"
 col_red = "\u001b[31;1m"
 
-torch.set_printoptions(precision = 5, sci_mode = False, linewidth = 200)
+torch.set_printoptions(precision=5, sci_mode=False, linewidth=200)
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-i", "--in_dir", type = str, default = None, help = "Input (model) directory")
-parser.add_argument("-w", "--work_dir", type = str, default = None, help = "Working directory")
-parser.add_argument("-o", "--out_dir", type = str, default = None, help = "Output directory")
-parser.add_argument("-ss", "--shard_size", type = int, help = "Max shard size in MB, default: 8192")
-parser.add_argument("-b", "--bits", type = float, help = "Bits per weight")
-parser.add_argument("-hb", "--head_bits", type = int, default = None, help = "Bits per weight, output (head) layer, default: 6")
-parser.add_argument("-resume", "--resume", action = "store_true", help = "Resume interrupted job from working directory")
-parser.add_argument("-cr", "--cal_rows", type = int, help = "Calibration data size, rows, default: 250")
-parser.add_argument("-cc", "--cal_cols", type = int, help = "Calibration data size, columns, default: 2048")
-parser.add_argument("-cpi", "--checkpoint_interval", type = int, default = 120, help = "Minimum checkpoint interval, in seconds")
-parser.add_argument("-lcpi", "--last_checkpoint_index", type = int, default = None, help = "Last module index to checkpoint (for debug purposes)")
-parser.add_argument("-v", "--verbose", action = "store_true", help = "Verbose mode")
-parser.add_argument("-d", "--devices", type = str, default = "0", help = "List of devices to use for quantization, e.g. --devices 0,1,2")
-parser.add_argument("-dr", "--device_ratios", type = str, default = "", help = "Split ratio for devices, e.g. --device_ratio 2,2,4")
-parser.add_argument("-img", "--image_dump", action = "store_true", help = "Save model tensors as images (saved to working directory)")
-parser.add_argument("-cb", "--codebook", type = str, default = "mcg", help = "Codebook: mcg (default), mul1 or 3inst")
-parser.add_argument("-strat", "--strategy", type = str, default = None, help = "Modifiers for quantization strategy - EXPERIMENTAL")
-parser.add_argument("-pm", "--parallel_mode", action = "store_true", help = "When possible, use new parallel mode for small tensors (MoE layers especially)")
-parser.add_argument("-pf", "--prefetch", action = "store_true", help = "Prefetch next module weights to CPU while quantizing current module")
-parser.add_argument("-bs", "--block_size", type = int, default = None, help = "LDLQ block size (must be multiple of 16). Larger values increase parallelism per GPU but may reduce quality. Default: adaptive (128 for regular layers, up to 512 for expert layers)")
+parser.add_argument("-i", "--in_dir", type=str,
+                    default=None, help="Input (model) directory")
+parser.add_argument("-w", "--work_dir", type=str,
+                    default=None, help="Working directory")
+parser.add_argument("-o", "--out_dir", type=str,
+                    default=None, help="Output directory")
+parser.add_argument("-ss", "--shard_size", type=int,
+                    help="Max shard size in MB, default: 8192")
+parser.add_argument("-b", "--bits", type=float, help="Bits per weight")
+parser.add_argument("-hb", "--head_bits", type=int, default=None,
+                    help="Bits per weight, output (head) layer, default: 6")
+parser.add_argument("-resume", "--resume", action="store_true",
+                    help="Resume interrupted job from working directory")
+parser.add_argument("-cr", "--cal_rows", type=int,
+                    help="Calibration data size, rows, default: 250")
+parser.add_argument("-cc", "--cal_cols", type=int,
+                    help="Calibration data size, columns, default: 2048")
+parser.add_argument("-cpi", "--checkpoint_interval", type=int,
+                    default=120, help="Minimum checkpoint interval, in seconds")
+parser.add_argument("-lcpi", "--last_checkpoint_index", type=int, default=None,
+                    help="Last module index to checkpoint (for debug purposes)")
+parser.add_argument("-v", "--verbose", action="store_true",
+                    help="Verbose mode")
+parser.add_argument("-d", "--devices", type=str, default="0",
+                    help="List of devices to use for quantization, e.g. --devices 0,1,2")
+parser.add_argument("-dr", "--device_ratios", type=str, default="",
+                    help="Split ratio for devices, e.g. --device_ratio 2,2,4")
+parser.add_argument("-img", "--image_dump", action="store_true",
+                    help="Save model tensors as images (saved to working directory)")
+parser.add_argument("-cb", "--codebook", type=str, default="mcg",
+                    help="Codebook: mcg (default), mul1 or 3inst")
+parser.add_argument("-strat", "--strategy", type=str, default=None,
+                    help="Modifiers for quantization strategy - EXPERIMENTAL")
+parser.add_argument("-pm", "--parallel_mode", action="store_true",
+                    help="When possible, use new parallel mode for small tensors (MoE layers especially)")
+parser.add_argument("-pf", "--prefetch", action="store_true",
+                    help="Prefetch next module weights to CPU while quantizing current module")
+parser.add_argument("-bs", "--block_size", type=int, default=None,
+                    help="LDLQ block size (must be multiple of 16). Larger values increase parallelism per GPU but may reduce quality. Default: adaptive (128 for regular layers, up to 512 for expert layers)")
 
 group = parser.add_mutually_exclusive_group()
-group.add_argument("--out_scales", dest = "out_scales_", action = "store_true", help = "Always enable out channel scales  (for debug purposes)")
-group.add_argument("--no_out_scales", dest = "out_scales_", action = "store_false", help = "Never enable out channel scales  (for debug purposes)")
-parser.set_defaults(out_scales_ = None)
+group.add_argument("--out_scales", dest="out_scales_", action="store_true",
+                   help="Always enable out channel scales  (for debug purposes)")
+group.add_argument("--no_out_scales", dest="out_scales_", action="store_false",
+                   help="Never enable out channel scales  (for debug purposes)")
+parser.set_defaults(out_scales_=None)
 
-parser.add_argument("--override_anyway", action = "store_true", help = "Allow resuming even when overriding settings that will break the existing job.")
+parser.add_argument("--override_anyway", action="store_true",
+                    help="Allow resuming even when overriding settings that will break the existing job.")
 
 num_ref_states = 5
 
@@ -62,43 +85,43 @@ max_progress = 0
 def get_adaptive_block_size(linear, user_block_size):
     """
     Determine optimal block size for LDLQ quantization.
-    
+
     For expert layers (small tensors), automatically use a larger block size
     to improve GPU utilization without degrading quality.
-    
+
     Args:
         linear: Linear layer to quantize
         user_block_size: User-specified block size (None for automatic)
-        
+
     Returns:
         Block size to use (must be multiple of 16 and not exceed tensor size)
     """
     # If user explicitly set block size, use it
     if user_block_size is not None:
         return user_block_size
-    
+
     # Check if this is an expert layer
     is_expert = "experts." in linear.key
-    
+
     if is_expert:
         # For expert layers, use tensor size to determine optimal block size
         # Experts are typically small, so we can use larger block sizes
         tensor_rows = linear.in_features
-        
+
         # Use up to 512 as block size (capped by tensor size)
         # This maximizes parallelism for small expert matrices
         block_size = min(tensor_rows, 512)
-        
+
         # Round down to multiple of 16
         block_size = (block_size // 16) * 16
-        
+
         # Ensure minimum of 128 for expert tensors >= 128 rows
         # For smaller expert tensors, use at least 16 but don't exceed tensor size
         if tensor_rows >= 128:
             return max(block_size, 128)
         else:
             return max(block_size, 16)
-    
+
     # Default block size for non-expert layers
     return 128
 
@@ -108,6 +131,7 @@ class PrefetchManager:
     Async prefetcher that loads next module's weights to CPU while current module is being quantized.
     This hides I/O latency behind GPU compute time.
     """
+
     def __init__(self, config):
         self.config = config
         self.prefetch_thread = None
@@ -139,11 +163,13 @@ class PrefetchManager:
         full_prefix = prefix + "."
         keys_with_prefix = getattr(trie, "keys_with_prefix", None)
         if callable(keys_with_prefix):
-            matching_keys = [key for key in keys_with_prefix(full_prefix) if isinstance(key, str)]
+            matching_keys = [key for key in keys_with_prefix(
+                full_prefix) if isinstance(key, str)]
         else:
             all_keys = trie.keys()
-            matching_keys = [key for key in all_keys if isinstance(key, str) and key.startswith(full_prefix)]
-        
+            matching_keys = [key for key in all_keys if isinstance(
+                key, str) and key.startswith(full_prefix)]
+
         # Get file paths for each key from tensor_file_map
         tensor_info = {}
         for key in matching_keys:
@@ -156,8 +182,9 @@ class PrefetchManager:
 
         def prefetch_worker():
             try:
-                print(f" -- [Prefetch] Starting: {module_key}{slice_str} ({len(tensor_info)} tensors)")
-                
+                print(
+                    f" -- [Prefetch] Starting: {module_key}{slice_str} ({len(tensor_info)} tensors)")
+
                 # Load tensors to CPU using safetensors directly (thread-safe)
                 tensors = {}
                 for key, file_path in tensor_info.items():
@@ -166,35 +193,39 @@ class PrefetchManager:
                             if key in f.keys():
                                 tensors[key] = f.get_tensor(key)
                     except Exception as e:
-                        print(f"{col_red} !! [Prefetch] Failed to load tensor '{key}' from '{file_path}': {e}{col_default}")
-                
+                        print(
+                            f"{col_red} !! [Prefetch] Failed to load tensor '{key}' from '{file_path}': {e}{col_default}")
+
                 self.prefetch_tensors = tensors
-                total_bytes = sum(t.numel() * t.element_size() for t in tensors.values()) if tensors else 0
-                print(f" -- [Prefetch] Ready: {module_key}{slice_str} ({len(tensors)} tensors, {total_bytes / 1024**2:.1f} MB)")
+                total_bytes = sum(t.numel() * t.element_size()
+                                  for t in tensors.values()) if tensors else 0
+                print(
+                    f" -- [Prefetch] Ready: {module_key}{slice_str} ({len(tensors)} tensors, {total_bytes / 1024**2:.1f} MB)")
             except Exception as e:
                 self.prefetch_error = e
                 print(f" !! [Prefetch] Error: {e}")
             finally:
                 self.prefetch_ready.set()
 
-        self.prefetch_thread = threading.Thread(target=prefetch_worker, daemon=True)
+        self.prefetch_thread = threading.Thread(
+            target=prefetch_worker, daemon=True)
         self.prefetch_thread.start()
 
     def wait_for_prefetch(self, module_idx, load_slice=None):
         """Wait for prefetch to complete and return True if tensors are available."""
         if self.prefetch_thread is None:
             return False
-        
+
         # Check if this is the module we prefetched
         if self.prefetch_module_idx != module_idx or self.prefetch_slice != load_slice:
             return False
-        
+
         # Wait for prefetch to complete
         self.prefetch_ready.wait()
-        
+
         if self.prefetch_error is not None:
             return False
-        
+
         return self.prefetch_tensors is not None and len(self.prefetch_tensors) > 0
 
     def get_prefetched_tensors(self):
@@ -230,19 +261,19 @@ def check_system():
 
 def save_dict(filename, dict_, args):
     path = os.path.join(args["work_dir"], filename)
-    with open(path, "w", encoding = "utf8") as f:
-        f.write(json.dumps(dict_, indent = 4))
+    with open(path, "w", encoding="utf8") as f:
+        f.write(json.dumps(dict_, indent=4))
 
 
 def load_dict(filename, args):
     path = os.path.join(args["work_dir"], filename)
-    with open(path, "r", encoding = "utf8") as f:
+    with open(path, encoding="utf8") as f:
         return json.load(f)
 
 
 def load_tensor(filename, args):
     path = os.path.join(args["work_dir"], filename)
-    with safe_open(path, framework = "pt", device = "cpu") as f:
+    with safe_open(path, framework="pt", device="cpu") as f:
         if "tensor" in f.keys():
             return f.get_tensor("tensor")
         else:
@@ -266,7 +297,7 @@ def save_tensor(tensor, filename: str, args):
         }, path)
     else:
         save_file({
-            f"tensor": tensor
+            "tensor": tensor
         }, path)
 
 
@@ -274,10 +305,10 @@ def prepare_env(args):
     qtensors_dir = os.path.join(args["work_dir"], "qtensors")
     ckpt_dir = os.path.join(args["work_dir"], "ckpt")
     images_dir = os.path.join(args["work_dir"], "images")
-    os.makedirs(args["work_dir"], exist_ok = True)
-    os.makedirs(qtensors_dir, exist_ok = True)
-    os.makedirs(ckpt_dir, exist_ok = True)
-    os.makedirs(images_dir, exist_ok = True)
+    os.makedirs(args["work_dir"], exist_ok=True)
+    os.makedirs(qtensors_dir, exist_ok=True)
+    os.makedirs(ckpt_dir, exist_ok=True)
+    os.makedirs(images_dir, exist_ok=True)
 
 
 def prepare(args) -> (dict, dict, bool, str):
@@ -291,8 +322,12 @@ def prepare(args) -> (dict, dict, bool, str):
         return None, None, False, "Must specify --out_dir or --resume"
     if args.codebook not in ["mcg", "mul1", "3inst"]:
         return None, None, False, "Codebook must be 'mcg', 'mul1' or '3inst'"
+    if args.bits is not None and (args.bits > 8 or args.bits < 1):
+        return None, None, False, "--bits must be between 1 and 8"
+    if args.head_bits is not None and (args.head_bits > 8 or args.head_bits < 1) and args.head_bits != 16:
+        return None, None, False, "--head_bits must be between 1 and 8, or 16"
 
-    in_args = { "work_dir": args.work_dir }
+    in_args = {"work_dir": args.work_dir}
     if args.resume:
         in_args = load_dict("args.json", in_args)
         in_args["work_dir"] = args.work_dir
@@ -354,9 +389,9 @@ def prepare(args) -> (dict, dict, bool, str):
 
     if args.resume:
         job_state = load_dict("ckpt/job.json", in_args)
-        print(f" -- Resuming existing job")
+        print(" -- Resuming existing job")
     else:
-        print(f" -- Creating new job")
+        print(" -- Creating new job")
         job_state = {
             "next_module_idx": 0,
             "surplus_bits": 0,
@@ -368,9 +403,12 @@ def prepare(args) -> (dict, dict, bool, str):
     print(f"    Input directory: {in_args['in_dir']}")
     print(f"    Output directory: {in_args['out_dir']}")
     print(f"    Working directory: {in_args['work_dir']}")
-    print(f"    Calibration size: {in_args['cal_rows']} rows, {in_args['cal_cols']} columns")
-    print(f"    Target bitrate: {in_args['bits']} (decoder), {in_args['head_bits']} (head)")
-    print(f"    Output scales: " + {True: "always", False: "never", None: "auto"}[in_args["apply_out_scales"]])
+    print(
+        f"    Calibration size: {in_args['cal_rows']} rows, {in_args['cal_cols']} columns")
+    print(
+        f"    Target bitrate: {in_args['bits']} (decoder), {in_args['head_bits']} (head)")
+    print("    Output scales: " +
+          {True: "always", False: "never", None: "auto"}[in_args["apply_out_scales"]])
     print(f"    Codebook: {in_args['codebook']}")
 
     if warn_experimental:
@@ -384,13 +422,13 @@ def prepare(args) -> (dict, dict, bool, str):
 
 def get_base_model(args):
     config = Config.from_directory(args["in_dir"])
-    print(f" -- Loaded model config")
+    print(" -- Loaded model config")
     print(f"    Architecture: {config.architecture}")
     model = Model.from_config(config)
-    print(f" -- Created model instance:")
+    print(" -- Created model instance:")
     print(model.get_layout_tree(4))
     tokenizer = Tokenizer.from_config(config)
-    print(f" -- Loaded tokenizer")
+    print(" -- Loaded tokenizer")
     print(f"    Vocab size: {tokenizer.actual_vocab_size}")
     if hasattr(config, "rope_settings"):
         config.rope_settings.print()
@@ -400,7 +438,7 @@ def get_base_model(args):
 def prepare_state(args, job_state, config, model, tokenizer):
     idx = job_state["next_module_idx"]
     if idx == 0:
-        print(f" -- Preparing input state")
+        print(" -- Preparing input state")
         state = get_default_calibration(args, tokenizer)
     else:
         if idx < len(model.modules):
@@ -412,12 +450,12 @@ def prepare_state(args, job_state, config, model, tokenizer):
 
 
 def get_state_error(x, ref):
-     x = x.view(-1, x.shape[-1]).float()
-     ref = ref.view(-1, ref.shape[-1]).float()
-     err = torch.linalg.norm(x - ref, 'fro') / torch.linalg.norm(ref, 'fro')
-     sq = sqnr(x, ref)
-     cos = cosine_error(x, ref)
-     return err.item(), cos, sq
+    x = x.view(-1, x.shape[-1]).float()
+    ref = ref.view(-1, ref.shape[-1]).float()
+    err = torch.linalg.norm(x - ref, 'fro') / torch.linalg.norm(ref, 'fro')
+    sq = sqnr(x, ref)
+    cos = cosine_error(x, ref)
+    return err.item(), cos, sq
 
 
 def mod_strategy(args, module, strategy, idx):
@@ -449,7 +487,7 @@ def mod_strategy(args, module, strategy, idx):
 def main(args, job_state):
     global max_progress, curr_progress
 
-    torch.set_printoptions(precision = 5, sci_mode = False, linewidth = 200)
+    torch.set_printoptions(precision=5, sci_mode=False, linewidth=200)
 
     torch.set_grad_enabled(False)
 
@@ -457,7 +495,8 @@ def main(args, job_state):
     device = torch.device(devices[0])
     if args.get("device_ratios"):
         device_ratios = [int(d) for d in args["device_ratios"].split(",")]
-        assert len(devices) == len(device_ratios), "--devices and --device_ratios must be same length"
+        assert len(devices) == len(
+            device_ratios), "--devices and --device_ratios must be same length"
     else:
         device_ratios = None
 
@@ -476,7 +515,7 @@ def main(args, job_state):
     use_prefetch = args.get("prefetch", False)
     if use_prefetch:
         prefetcher = PrefetchManager(config)
-        print(f" -- Prefetch mode enabled")
+        print(" -- Prefetch mode enabled")
 
     # Iterate over modules
     for idx, module in enumerate(model.modules):
@@ -512,8 +551,9 @@ def main(args, job_state):
             slice_str = f" (slice {current_slice + 1}/{module.num_slices})" if slicing else ""
             print(f" -- Loading unquantized module: {module.key}" + slice_str)
             module.load(
-                torch.device("cpu") if module.caps.get("prefer_cpu") else device,
-                load_slice = current_slice if slicing else None
+                torch.device("cpu") if module.caps.get(
+                    "prefer_cpu") else device,
+                load_slice=current_slice if slicing else None
             )
             for m in module:
                 if m.used_alt_key and not slicing:
@@ -538,28 +578,30 @@ def main(args, job_state):
                             "activate_all_experts": model.calibration_all_experts,
                         }
                         if slicing:
-                             params["q_mlp_slice"] = current_slice
+                            params["q_mlp_slice"] = current_slice
                         rs = module.prepare_for_device(state[i], params)
                         rs = module.forward(rs, params)
                         if i < num_ref_states:
                             if model.calibration_all_experts:
-                                # Reference state for measuring error need, with only selected experts
-                                params = { "attn_mode": "flash_attn_nc" }
+                                # Do not activate all experts for reference state, for error measurement
+                                params = {"attn_mode": "flash_attn_nc"}
                                 if slicing:
                                     params["q_mlp_slice"] = current_slice
-                                rs = module.prepare_for_device(state[i], params)
+                                rs = module.prepare_for_device(
+                                    state[i], params)
                                 rs = module.forward(rs, params)
                             ref_states.append(rs.cpu())
                         rs = None
                 print(f" -- Captured: {module.key}" + slice_str)
                 sys.stdout.flush()
 
-                # Swap captured H to system RAM
+                # Check for infs or NaNs in H
                 for k, v in capture_H.items():
                     infs, nans = v["inf_nan"][0].item(), v["inf_nan"][1].item()
                     if infs or nans:
                         numel = v["num_total"]
-                        print(f" !! Warning: {k} state has {infs:,} inf values and {nans:,} NaN values (out of {numel:,})")
+                        print(
+                            f" !! Warning: {k} state has {infs:,} inf values and {nans:,} NaN values (out of {numel:,})")
 
                 # Swap captured H to system RAM
                 for k, v in capture_H.items():
@@ -567,11 +609,13 @@ def main(args, job_state):
                     v["H"] = v["H"].cpu()
 
             # Get submodules to quantize
-            linears = [m for m in module if isinstance(m, Linear) and m.qmap and m.device is not None]
+            linears = [m for m in module if isinstance(
+                m, Linear) and m.qmap and m.device is not None]
             for linear in linears:
                 assert linear.key in strategy, \
                     f" ## Logic error, no quantization strategy for module {linear.key}"
-            assert all(isinstance(linear.inner, LinearFP16) for linear in linears)
+            assert all(isinstance(linear.inner, LinearFP16)
+                       for linear in linears)
 
             # Write images
             if args["image_dump"]:
@@ -580,7 +624,8 @@ def main(args, job_state):
                     print(f" -- Saving image: {filename}")
                     w = linear.inner.get_weight_tensor()
                     assert w.dim() == 2
-                    save_tensor_image(w, os.path.join(args["work_dir"], filename))
+                    save_tensor_image(w, os.path.join(
+                        args["work_dir"], filename))
 
             # Move original tensors to system RAM (load to GPU one by one when quantizing)
             for linear in linears:
@@ -600,15 +645,16 @@ def main(args, job_state):
                     next_module_idx = idx + 1
                     next_module = model.modules[next_module_idx]
                     next_slice = 0 if next_module.num_slices > 1 else None
-                
+
                 if next_module_idx is not None:
                     next_mod = model.modules[next_module_idx]
-                    prefetcher.start_prefetch(next_mod, next_module_idx, next_slice)
+                    prefetcher.start_prefetch(
+                        next_mod, next_module_idx, next_slice)
 
             # Decide mode
             # TODO: Might be useful to compare no. h-tiles per tensor, no. layers and no. SMs across GPUs
             use_parallel_mode = False
-            if args["parallel_mode"] and len(linears) >= len(devices):
+            if args["parallel_mode"] and len(linears) >= len(devices) and all(b <= 8 for _, b in strategy.items()):
                 use_parallel_mode = True
 
             # Quantize module, layer parallel
@@ -623,12 +669,13 @@ def main(args, job_state):
                     dev_numel = [tot_numel // len(devices) for _ in devices]
                 else:
                     tot_split = sum(device_ratios)
-                    dev_numel = [tot_numel * r // tot_split for _, r in zip(devices, device_ratios)]
+                    dev_numel = [tot_numel * r // tot_split for _,
+                                 r in zip(devices, device_ratios)]
 
                 for linear in linears:
                     l_numel = linear.weights_numel()
                     fit = [d_numel - l_numel for d_numel in dev_numel]
-                    bestfit = max(range(len(fit)), key = lambda x: fit[x])
+                    bestfit = max(range(len(fit)), key=lambda x: fit[x])
                     dev_numel[bestfit] -= l_numel
                     all_dev_linears[bestfit].append(linear)
 
@@ -642,8 +689,9 @@ def main(args, job_state):
 
                     for linear in dev_linears:
                         # Determine optimal block size (adaptive for experts)
-                        adaptive_block_size = get_adaptive_block_size(linear, args["block_size"])
-                        
+                        adaptive_block_size = get_adaptive_block_size(
+                            linear, args["block_size"])
+
                         quant_args_local = {
                             "seed": idx,
                             "K": strategy[linear.key],
@@ -651,15 +699,17 @@ def main(args, job_state):
                             "apply_out_scales": args["apply_out_scales"],
                             "buf_size_k": adaptive_block_size,
                         }
-                        if args["codebook"] == "mcg": quant_args_local.update({ "mcg": True })
-                        elif args["codebook"] == "mul1": quant_args_local.update({ "mul1": True })
+                        if args["codebook"] == "mcg":
+                            quant_args_local.update({"mcg": True})
+                        elif args["codebook"] == "mul1":
+                            quant_args_local.update({"mul1": True})
 
                         proxy_err = linear.convert_exl3(
                             capture_H[linear.qmap],
-                            quant_args = quant_args_local,
-                            verbose = args["verbose"],
-                            save_reg = False,
-                            override_swap_device = device_idx
+                            quant_args=quant_args_local,
+                            verbose=args["verbose"],
+                            save_reg=False,
+                            override_swap_device=device_idx
                         )
                         assert isinstance(linear.inner, LinearEXL3)
                         linear.inner.swap_cpu()
@@ -680,20 +730,21 @@ def main(args, job_state):
                 threads = []
                 for i, device_idx in enumerate(devices):
                     if len(all_dev_linears[i]):
-                        t = threading.Thread(target = work_thread, args = (device_idx, all_dev_linears[i]))
+                        t = threading.Thread(target=work_thread, args=(
+                            device_idx, all_dev_linears[i]))
                         t.daemon = True
                         threads.append(t)
                 for t in threads:
                     t.start()
 
                 try:
-                    with ProgressBar(" -- Quantizing (parallel)", max_progress, transient = True) as progress:
+                    with ProgressBar(" -- Quantizing (parallel)", max_progress, transient=True) as progress:
                         while any(t.is_alive() for t in threads):
                             progress.update(curr_progress)
                             time.sleep(0.1)
                 except KeyboardInterrupt as e:
                     # TODO: This is too hacky
-                    from signal import pthread_kill, SIGTSTP, SIGKILL
+                    from signal import SIGKILL, SIGTSTP, pthread_kill
                     for t in threads:
                         pthread_kill(t.ident, SIGTSTP)
                         pthread_kill(t.ident, SIGKILL)
@@ -701,48 +752,58 @@ def main(args, job_state):
                     sys.exit()
 
                 for t in threads:
-                    t.join(timeout = 0.1)
+                    t.join(timeout=0.1)
 
             # Quantize module, single GPU or tensor split
             else:
                 for linear in linears:
-                    # Determine optimal block size (adaptive for experts)
-                    adaptive_block_size = get_adaptive_block_size(linear, args["block_size"])
-                    
-                    quant_args = {
-                        "seed": idx,
-                        "K": strategy[linear.key],
-                        "devices": devices,
-                        "device_ratios": device_ratios,
-                        "apply_out_scales": args["apply_out_scales"],
-                        "buf_size_k": adaptive_block_size,
-                    }
-                    if args["codebook"] == "mcg": quant_args.update({ "mcg": True })
-                    elif args["codebook"] == "mul1": quant_args.update({ "mul1": True })
-
-                    with Timer() as t:
-                        sr = os.path.join(args["work_dir"], f"images/{linear.key}.reg.jpg") \
-                            if args["image_dump"] else None
-                        proxy_err = linear.convert_exl3(
-                            capture_H[linear.qmap],
-                            quant_args = quant_args,
-                            progress_str = f" -- <step>: {linear.key}",
-                            verbose = args["verbose"],
-                            save_reg = sr,
+                    if strategy[linear.key] == 16:
+                        print(
+                            f" -- Unquantized: {linear.key:{config.stc.max_key_len() + 6}}"
+                            f"  bpw: {16:5.2f}"
                         )
-                        assert isinstance(linear.inner, LinearEXL3)
-                        linear.inner.swap_cpu()
-                    flags = "o" if quant_args["apply_out_scales"] else "."
-                    proxy_err_str = f"{proxy_err:8.6f}" if proxy_err >= 0.0 else "(OoM)   "
-                    print(
-                        f" -- Quantized: {linear.key:{config.stc.max_key_len() + 8}}"
-                        f"  bpw: {quant_args['K']:5.2f}"
-                        f"  proxy_err: {proxy_err_str}"
-                        f"  {flags}"
-                        f"  g_sc: {quant_args['g_scale']:.6f}"
-                        f"  [{t.interval:4.2f} s]"
-                    )
-                    sys.stdout.flush()
+                        sys.stdout.flush()
+                    else:
+                        # Determine optimal block size (adaptive for experts)
+                        adaptive_block_size = get_adaptive_block_size(
+                            linear, args["block_size"])
+
+                        quant_args = {
+                            "seed": idx,
+                            "K": strategy[linear.key],
+                            "devices": devices,
+                            "device_ratios": device_ratios,
+                            "apply_out_scales": args["apply_out_scales"],
+                            "buf_size_k": adaptive_block_size,
+                        }
+                        if args["codebook"] == "mcg":
+                            quant_args.update({"mcg": True})
+                        elif args["codebook"] == "mul1":
+                            quant_args.update({"mul1": True})
+
+                        with Timer() as t:
+                            sr = os.path.join(args["work_dir"], f"images/{linear.key}.reg.jpg") \
+                                if args["image_dump"] else None
+                            proxy_err = linear.convert_exl3(
+                                capture_H[linear.qmap],
+                                quant_args=quant_args,
+                                progress_str=f" -- <step>: {linear.key}",
+                                verbose=args["verbose"],
+                                save_reg=sr,
+                            )
+                            assert isinstance(linear.inner, LinearEXL3)
+                            linear.inner.swap_cpu()
+                        flags = "o" if quant_args["apply_out_scales"] else "."
+                        proxy_err_str = f"{proxy_err:8.6f}" if proxy_err >= 0.0 else "(OoM)   "
+                        print(
+                            f" -- Quantized: {linear.key:{config.stc.max_key_len() + 8}}"
+                            f"  bpw: {quant_args['K']:5.2f}"
+                            f"  proxy_err: {proxy_err_str}"
+                            f"  {flags}"
+                            f"  g_sc: {quant_args['g_scale']:.6f}"
+                            f"  [{t.interval:4.2f} s]"
+                        )
+                        sys.stdout.flush()
 
             # Collect converted module tensors
             for m in module:
@@ -764,7 +825,7 @@ def main(args, job_state):
         config.stc.set_new_tensors(q_tensors)
         module.load(
             torch.device("cpu") if module.caps.get("prefer_cpu") else device,
-            source = q_tensors
+            source=q_tensors
         )
         config.stc.set_new_tensors(None)
         del q_tensors
@@ -797,7 +858,7 @@ def main(args, job_state):
         module_time = time.time() - start_module_time
         print(
             f" -- Quantized: {module.key:{config.stc.max_key_len() + 8}}" +
-            (f"  bpw: {final_bpw:5.2f}" if final_bpw else f"  no_weights") +
+            (f"  bpw: {final_bpw:5.2f}" if final_bpw else "  no_weights") +
             (f"  rfn: {error:.6f}" if module.num_slices == 1 else "        rfn: N/A     ") +
             f"  cos: {cos_error:.6f}"
             f"  sqnr: {sqnr_:.6f}"
@@ -807,7 +868,8 @@ def main(args, job_state):
         if idx >= model.first_block_idx:
             overall_time = time.time() - start_time
             timed_blocks += 1
-            est_remaining = (overall_time / timed_blocks) * (len(model.modules) - idx)
+            est_remaining = (overall_time / timed_blocks) * \
+                (len(model.modules) - idx)
             print(f" -- Estimated remaining time: {human_time(est_remaining)}")
 
         # Unload current module
@@ -817,12 +879,12 @@ def main(args, job_state):
         # Checkpoint
         job_state["next_module_idx"] = idx + 1
         if time.time() > last_checkpoint_time + args["checkpoint_interval"] and \
-            (args.get("last_checkpoint_index", -1) < 0 or idx <= args["last_checkpoint_index"]):
-            print(f" -- Saving checkpoint")
+                (args.get("last_checkpoint_index", -1) < 0 or idx <= args["last_checkpoint_index"]):
+            print(" -- Saving checkpoint")
             ckpt_dir = os.path.join(args["work_dir"], "ckpt")
             ckpt_dir_old = os.path.join(args["work_dir"], "ckpt_old")
             ckpt_dir_new = os.path.join(args["work_dir"], "ckpt_new")
-            os.makedirs(ckpt_dir_new, exist_ok = True)
+            os.makedirs(ckpt_dir_new, exist_ok=True)
             save_dict("ckpt_new/job.json", job_state, args)
             save_tensor(state, "ckpt_new/state.safetensors", args)
             if os.path.exists(ckpt_dir_old):

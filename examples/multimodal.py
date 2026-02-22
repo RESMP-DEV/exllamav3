@@ -8,7 +8,7 @@ import requests
 import torch
 torch.set_printoptions(precision = 5, sci_mode = False, linewidth=200)
 
-mode = "glm"
+mode = "qwen25"
 cache_size = 8192
 streaming = True
 
@@ -19,12 +19,18 @@ match mode:
     case "mistral3":
         prompt_format = "mistral"
         model_dir = "/mnt/str/models/mistral-small-3.1-24b-instruct-2503/exl3/4.0bpw/"
+    case "qwen25":
+        prompt_format = "chatml"
+        model_dir = "/mnt/str/models/qwen2.5-vl-7b-instruct/exl3/4.00bpw"
     case "qwen3":
         prompt_format = "chatml"
         model_dir = "/mnt/str/models/qwen3-vl-30b-a3b-instruct/exl3/5.00bpw"
     case "glm":
         prompt_format = "glmv"
         model_dir = "/mnt/str/models/glm4.5v/exl3/4.00bpw"
+    case "hcx":
+        prompt_format = "chatml"
+        model_dir = "/mnt/str/models/hyperclovax-seed-think-32b/exl3/4.00bpw"
 
 images = [
     # Cat
