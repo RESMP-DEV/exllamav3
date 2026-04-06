@@ -78,7 +78,7 @@ jobs:
       #Free disk space
 
       - name: Free Disk Space
-        uses: jlumbroso/free-disk-space@v1.3.1
+        uses: jlumbroso/free-disk-space@54081f138730dfa15788a46383842cd2f914a1be # v1.3.1
         if: runner.os == 'Linux'
         with:
           tool-cache: true
@@ -90,7 +90,7 @@ jobs:
 
       # Setup Python
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       # Get version string from package
 
@@ -117,7 +117,7 @@ jobs:
 
       # Install uv for easier python setup
       - name: Install the latest version of uv and set the python version
-        uses: astral-sh/setup-uv@v5
+        uses: astral-sh/setup-uv@6b9c6063abd6010835644d4c2e1bef4cf5cd0fca # v6.0.1
         with:
           enable-cache: true
           python-version: ${{ matrix.pyver }}
@@ -165,7 +165,7 @@ jobs:
       # each job, during installation
       # TODO: Find specific sub-packages
       - name: Install Linux CUDA ${{ matrix.cuda }}
-        uses: Jimver/cuda-toolkit@v0.2.24
+        uses: Jimver/cuda-toolkit@c35baa1a18fd1fc9dcf47c5bd839bf30559c0bc3 # v0.2.24
         id: cuda-toolkit-Linux
         with:
           cuda: "${{ matrix.cuda }}"
@@ -222,7 +222,7 @@ jobs:
 
       - name: Upload files to GitHub release
         if: steps.package_version.outputs.PACKAGE_VERSION != 'None' && inputs.release == '1'
-        uses: svenstaro/upload-release-action@2.6.1
+        uses: svenstaro/upload-release-action@2b9d2847a97b04d02ad5c3df2d3a27baa97ce689 # v2.6.1
         with:
           file: ./dist/*.whl
           tag: ${{ format('v{0}', steps.package_version.outputs.PACKAGE_VERSION) }}
