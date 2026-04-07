@@ -19,7 +19,7 @@ col_gray = "\u001b[37;1m"
 
 @lru_cache
 def cached_ids(length):
-    return torch.ones((1, length), dtype = torch.long)
+    return torch.arange(length, dtype = torch.long).unsqueeze(0)
 
 
 def get_lengths(max_length):
@@ -118,6 +118,9 @@ def measure_generate(args, model, cache, warmup = False):
 
 @torch.inference_mode()
 def main(args):
+
+    assert args.max_length <= args.cache_size, \
+        "max_length cannot exceed cache size"
 
     model, config, cache, tokenizer = model_init.init(args, max_chunk_size = args.chunk_size)
     bpw_layer, bpw_head, vram_bits = model.get_storage_info()

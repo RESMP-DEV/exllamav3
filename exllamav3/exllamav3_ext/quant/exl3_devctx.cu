@@ -62,8 +62,9 @@ int* DevCtx::get_locks(int device)
     if (!locks[device])
     {
         cudaSetDevice(device);
-        cudaMalloc(&locks[device], MAX_TILES_C * sizeof(int));
-        cudaMemset(locks[device], 0, MAX_TILES_C * sizeof(int));
+        size_t size = (MAX_TILES_C + MAX_BARRIERS * 2) * sizeof(int);
+        cudaMalloc(&locks[device], size);
+        cudaMemset(locks[device], 0, size);
     }
     return (int*) locks[device];
 }
@@ -76,4 +77,11 @@ int g_get_cc(int device)
 int g_get_num_sms(int device)
 {
     return DevCtx::instance().get_num_sms(device);
+}
+
+void prepare_ctx(int device)
+{
+    DevCtx::instance().get_num_sms(device);
+    DevCtx::instance().get_cc(device);
+    DevCtx::instance().get_locks(device);
 }

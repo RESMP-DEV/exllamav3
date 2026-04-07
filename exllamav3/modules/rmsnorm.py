@@ -40,7 +40,7 @@ class RMSNorm(Module):
     def load(self, device: torch.device, **kwargs):
         self.device = device
         if not self.unweighted:
-            weight = self.config.stc.get_tensor(f"{self.key}.weight", self.device, float2half = True)
+            weight = self.config.stc.get_tensor(f"{self.key}.weight", self.device, float2half = True, allow_bf16 = True)
             self._numel = weight.numel()
             self.weight = nn.Parameter(weight, requires_grad = False)
         else:
@@ -84,9 +84,34 @@ class RMSNorm(Module):
         params,
         out_dtype: torch.dtype | None = None,
     ) -> torch.Tensor:
+        dtype = out_dtype or self.out_dtype
 
-        y = torch.empty_like(x, dtype = out_dtype or self.out_dtype)
-        ext.rms_norm(x, self.weight, y, self.rms_norm_eps, self.constant_bias, self.span_heads)
+        # ext.rms_norm expects row-major 2D inputs for the standard
+        # per-channel RMSNorm path. Flattening keeps results consistent across
+        # chunk/prefill shapes (e.g. [B, T, C] vs [B*T, C]).
+        # TODO: Weight tensor is always contiguous, so this could be handled more efficiently in the extension
+        if not self.span_heads and x.dim() > 2:
+            x_2d = x.view(-1, x.shape[-1]).contiguous()
+            y_2d = torch.empty_like(x_2d, dtype = dtype)
+            ext.rms_norm(
+                x_2d,
+                self.weight,
+                y_2d,
+                self.rms_norm_eps,
+                self.constant_bias,
+                self.span_heads,
+            )
+            return y_2d.view_as(x)
+
+        y = torch.empty_like(x, dtype = dtype)
+        ext.rms_norm(
+            x,
+            self.weight,
+            y,
+            self.rms_norm_eps,
+            self.constant_bias,
+            self.span_heads,
+        )
         return y
 
     def make_tp_allocation(self, options: dict) -> list[TPAllocation]:
@@ -111,6 +136,7 @@ class RMSNorm(Module):
                 "rms_norm_eps": self.rms_norm_eps,
                 "out_dtype": self.out_dtype,
                 "constant_bias": self.constant_bias,
+                "span_heads": self.span_heads,
             },
             "weight": producer.send(self.weight),
             "device": self.device,
@@ -127,6 +153,7 @@ class RMSNorm(Module):
         module.device = device
         w = consumer.recv(exported["weight"], cuda = True)
         module.weight = nn.Parameter(w) if w is not None else None
+        # span_heads is preserved via kwargs
         torch.cuda.synchronize()
         return module
 
@@ -145,6 +172,11 @@ class RMSNorm(Module):
         if w is not None:
             if w.dim() == 2:
                 w = w[first : last, :]
+            elif w.dim() == 1 and module.span_heads:
+                # 1D weight tensor (e.g., span_heads=True norms)
+                # split contains element indices
+                w = w[first : last]
             module.weight = nn.Parameter(w.to(module.device).contiguous())
+        # span_heads is preserved via kwargs
 
         return module

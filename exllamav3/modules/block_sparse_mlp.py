@@ -11,7 +11,10 @@ from dataclasses import dataclass
 from .mlp import MLP, GatedMLP
 from ..model.model_tp_alloc import TPAllocation
 from ..util import profile_opt
+from ..util.tensor import g_tensor_cache
 
+TEMP_ROWS_FUSED = 128
+TEMP_ROWS_GRAPH = 32
 
 @dataclass
 class RoutingCFG:
@@ -25,6 +28,13 @@ class RoutingCFG:
     routed_scaling_factor: float | None
     n_group: int | None
     topk_group: int | None
+
+@dataclass
+class FusedBuffers:
+    temp_state_g: torch.Tensor
+    temp_state_u: torch.Tensor
+    temp_intermediate_g: torch.Tensor
+    temp_intermediate_u: torch.Tensor
 
 
 def routing_std(bsz, cfg, y, params):
@@ -113,6 +123,8 @@ def routing_dots(bsz, cfg, y, params):
         activate_all_experts = params.get("activate_all_experts")
         if activate_all_experts:
             routing_weights = router_logits.sigmoid()
+            if cfg.e_score_correction_bias is not None:
+                routing_weights += cfg.e_score_correction_bias.unsqueeze(0)
             factor = cfg.routed_scaling_factor / (routing_weights.sum(dim = -1, keepdim = True) + 1e-20)
             routing_weights *= factor
             selected_experts = (
@@ -139,6 +151,7 @@ class ExpertsCFG:
     interm_u: torch.Tensor
     interm_a: torch.Tensor
     out_d: torch.Tensor
+    out_d2: torch.Tensor
     min_expert: int
     max_expert: int
 
@@ -157,6 +170,8 @@ class BlockSparseMLP(Module):
         key_up: str | None = None,
         key_gate: str | None = None,
         key_down: str | None = None,
+        key_gate_split: str | None = None,
+        key_up_split: str | None = None,
         key_gate_up_split: str | None = None,
         key_down_split: str | None = None,
         key_routing_gate: str | None = None,
@@ -165,6 +180,7 @@ class BlockSparseMLP(Module):
         qmap: str | None = None,
         out_dtype: torch.dtype = None,
         activation_fn: str = "silu",
+        act_limit: float = 0.0,
         interm_dtype: torch.dtype = None,
         router_type: str = "std",
         routing_gate: Linear | None = None,
@@ -179,10 +195,11 @@ class BlockSparseMLP(Module):
         routing_first: int | None = None,
         routing_last: int | None = None,
         routing_device: int | None = None,
+        transposed_load: bool = True,
+        transpose_fused_weights: bool = True,
     ):
         super().__init__(config, key, None)
 
-        self.out_dtype = out_dtype
         self.interm_dtype = interm_dtype
         self.activation_fn = activation_fn
         self.intermediate_size = intermediate_size
@@ -192,6 +209,7 @@ class BlockSparseMLP(Module):
         self.num_local_experts = num_local_experts if num_local_experts is not None else num_experts
         self.hidden_size = hidden_size
         self.router_type = router_type
+        self.act_limit = act_limit
 
         self.routing_first = routing_first
         self.routing_last = routing_last
@@ -200,6 +218,15 @@ class BlockSparseMLP(Module):
         self.routed_scaling_factor = routed_scaling_factor
         self.n_group = n_group
         self.topk_group = topk_group
+
+        assert out_dtype in (torch.float, None), \
+            f"BlockSparseMLP output dtype must be float"
+
+        assert shared_experts is None or shared_experts.out_dtype in (torch.float, None), \
+            f"Shared experts output dtype must be float"
+
+        assert num_experts_per_tok <= TEMP_ROWS_GRAPH, \
+            f"Too many experts per token, max supported is {TEMP_ROWS_GRAPH}"
 
         if routing_gate is None and key_routing_gate is None:
             self.routing_gate = None
@@ -250,38 +277,58 @@ class BlockSparseMLP(Module):
 
             for idx in range(self.num_local_experts):
 
+                fkey_gate, fkey_up, fkey_down = (
+                    f"{key}.{key_gate_up_split}" if key_gate_up_split else
+                    f"{key}.{key_gate_split}" if key_gate_split else
+                    None,
+                    f"{key}.{key_gate_up_split}" if key_gate_up_split else
+                    f"{key}.{key_up_split}" if key_up_split else
+                    None,
+                    f"{key}.{key_down_split}" if key_down_split else
+                    None
+                )
+
                 gate = Linear(
                     config = config,
                     key = f"{key}.{key_gate}".replace("{expert_idx}", str(idx)),
-                    fkey = f"{key}.{key_gate_up_split}",
+                    fkey = fkey_gate,
                     fidx = idx,
-                    frange = (0, intermediate_size),
+                    frange = (0, intermediate_size) if key_gate_up_split else None,
                     in_features = hidden_size,
                     out_features = intermediate_size,
                     qmap = qmap + ".input",
-                    out_dtype = self.interm_dtype
+                    out_dtype = self.interm_dtype,
+                    transposed_load = transposed_load,
+                    transpose_fused_weights = transpose_fused_weights,
+                    qgroup = key + ".block_gud",
                 )
                 up = Linear(
                     config = config,
                     key = f"{key}.{key_up}".replace("{expert_idx}", str(idx)),
-                    fkey = f"{key}.{key_gate_up_split}",
+                    fkey = fkey_up,
                     fidx = idx,
-                    frange = (intermediate_size, intermediate_size * 2),
+                    frange = (intermediate_size, intermediate_size * 2) if key_gate_up_split else None,
                     in_features = hidden_size,
                     out_features = intermediate_size,
                     qmap = qmap + ".input",
-                    out_dtype = self.interm_dtype
+                    out_dtype = self.interm_dtype,
+                    transposed_load = transposed_load,
+                    transpose_fused_weights = transpose_fused_weights,
+                    qgroup = key + ".block_gud",
                 )
                 down = Linear(
                     config = config,
                     key = f"{key}.{key_down}".replace("{expert_idx}", str(idx)),
-                    fkey = f"{key}.{key_down_split}",
+                    fkey = fkey_down,
                     fidx = idx,
                     in_features = intermediate_size,
                     out_features = hidden_size,
                     qmap = qmap + f".{idx}.down",
-                    out_dtype = self.out_dtype,
+                    out_dtype = torch.float,
                     allow_input_padding = True,
+                    transposed_load = transposed_load,
+                    transpose_fused_weights = transpose_fused_weights,
+                    qgroup = key + ".block_gud",
                 )
 
                 self.ups.append(up)
@@ -297,6 +344,7 @@ class BlockSparseMLP(Module):
             case "gelu": self.activation_fn_call = ext.gelu_mul
 
         self.is_quantized = False
+        self.support_fused = False
         self.multi_gate = None
         self.multi_up = None
         self.multi_down = None
@@ -321,6 +369,7 @@ class BlockSparseMLP(Module):
 
         self.bc = None
         self.bc_sh_exp = False
+        self.fused_mode_buffers = None
 
 
     @override
@@ -356,66 +405,93 @@ class BlockSparseMLP(Module):
             self.multi_up = MultiLinear(self.device, self.ups)
             self.multi_down = MultiLinear(self.device, self.downs)
 
-        yh = torch.empty(
-            (self.num_experts_per_tok, 1, self.hidden_size),
-            dtype = torch.half,
-            device = self.device
-        )
-        interm_g = torch.empty(
-            (self.num_experts_per_tok, 1, self.intermediate_size),
-            dtype = self.interm_dtype,
-            device = self.device
-        )
-        interm_u = torch.empty_like(interm_g)
-        interm_a = torch.empty_like(interm_u, dtype = torch.half) if self.interm_dtype != torch.half else interm_u
-        out_d = torch.empty(
-            (self.num_experts_per_tok, 1, self.hidden_size),
-            dtype = self.out_dtype or torch.half,
-            device = self.device
-        )
+            # Enable fully fused kernel if possible
+            self.support_fused = ((True, False) == self.multi_gate.q_cb() == self.multi_up.q_cb() == self.multi_down.q_cb())
 
+        # Temp buffers for graph, dq and fused-bsz1 paths
+        numex = self.num_experts_per_tok
+        H = self.hidden_size
+        I = self.intermediate_size
+        device = self.device
+
+        temp_hidden = g_tensor_cache.get(device, (TEMP_ROWS_GRAPH * 2, H), torch.half, "moe1_temp_hidden")
+        temp_interm = g_tensor_cache.get(device, (TEMP_ROWS_GRAPH * 2, I), self.interm_dtype, "moe1_temp_interm")
+        temp_activa = g_tensor_cache.get(device, (TEMP_ROWS_GRAPH, I), torch.half, "moe1_temp_activa")
+        temp_output = g_tensor_cache.get(device, (TEMP_ROWS_GRAPH, H), torch.float, "moe1_temp_output")
+
+        yh = temp_hidden[:numex].view(numex, 1, H)
+        interm_g = temp_interm[:numex].view(numex, 1, I)
+        interm_u = temp_interm[numex:numex*2].view(numex, 1, I)
+        interm_a = temp_activa[:numex].view(numex, 1, I)
+        yh2 = temp_hidden
+        interm_gu = temp_interm
+        interm_a2 = temp_activa
+        out_d = temp_output[:numex].view(numex, 1, H)
+        out_d2 = temp_output
+
+        # Expert interval for split module (-1, -1) indicate no split
         mine, maxe = self.routing_first, self.routing_last
         if mine is None or maxe - mine == self.num_experts:
             mine, maxe = -1, -1
-        self.experts_cfg = ExpertsCFG(
+
+        cfg = ExpertsCFG(
             yh = yh,
             interm_g = interm_g,
             interm_u = interm_u,
             interm_a = interm_a,
             out_d = out_d,
+            out_d2 = out_d2,
             min_expert = mine,
             max_expert = maxe,
         )
+        self.experts_cfg = cfg
 
-        cfg = self.experts_cfg
         if self.is_quantized:
 
-            sh_exp = None
+            # Embed bound classes for shared experts and shared gate
+            sh_exp_bc = None
             sh_exp_t = None
-            sh_gate = None
+            sh_gate_bc = None
             sh_gate_t = None
             self.bc_sh_exp = False
             if self.shared_experts and isinstance(self.shared_experts, GatedMLP) and self.shared_experts.bc is not None:
                 self.bc_sh_exp = True
-                sh_exp = self.shared_experts.bc
-                sh_exp_t = torch.empty(
-                    (1, 1, self.hidden_size),
-                    dtype = self.out_dtype or torch.half,
-                    device = self.device
-                )
+                sh_exp_bc = self.shared_experts.bc
+                sh_exp_t = torch.empty((1, 1, H), dtype = torch.float, device = self.device)
                 if self.shared_gate:
                     assert self.shared_gate.quant_type == "fp16"
-                    sh_gate = self.shared_gate.inner.bc
+                    sh_gate_bc = self.shared_gate.inner.bc
                     sh_gate_t = torch.empty((1, 1, 1), dtype = self.shared_gate.out_dtype, device = self.device)
 
+            # Pointer lists for fused modes
+            g_trellis_ptr = torch.tensor([l.inner.trellis.data_ptr() for l in self.gates])
+            u_trellis_ptr = torch.tensor([l.inner.trellis.data_ptr() for l in self.ups])
+            g_suh_ptr = torch.tensor([l.inner.suh.data_ptr() for l in self.gates])
+            u_suh_ptr = torch.tensor([l.inner.suh.data_ptr() for l in self.ups])
+            g_svh_ptr = torch.tensor([l.inner.svh.data_ptr() for l in self.gates])
+            u_svh_ptr = torch.tensor([l.inner.svh.data_ptr() for l in self.ups])
+            gu_trellis_ptr = torch.stack((g_trellis_ptr, u_trellis_ptr), dim = 0).T.contiguous().to(self.device)
+            gu_suh_ptr = torch.stack((g_suh_ptr, u_suh_ptr), dim = 0).T.contiguous().to(self.device)
+            gu_svh_ptr = torch.stack((g_svh_ptr, u_svh_ptr), dim = 0).T.contiguous().to(self.device)
+
+            dq_temp_up = g_tensor_cache.get(device, (H, I), torch.half, "dq_temp")
+            dq_temp_down = dq_temp_up.view(I, H)
+
+            # Bound class for graph, dq and fused-bsz1 paths
             self.bc = ext.BC_BlockSparseMLP(
+                yh2,
                 cfg.yh,
+                interm_gu,
                 cfg.interm_g,
                 cfg.interm_u,
                 cfg.interm_a,
+                interm_a2,
                 cfg.out_d,
+                cfg.out_d2,
                 sh_exp_t,
                 sh_gate_t,
+                dq_temp_up,
+                dq_temp_down,
                 cfg.min_expert,
                 cfg.max_expert,
                 self.multi_gate.ptrs_trellis,
@@ -438,9 +514,28 @@ class BlockSparseMLP(Module):
                 self.multi_down.mul1,
                 self.activation_fn == "silu",
                 self.activation_fn == "gelu",
-                sh_exp,
-                sh_gate
+                sh_exp_bc,
+                sh_gate_bc,
+                self.act_limit,
+                [x.inner.bc for x in self.gates],
+                [x.inner.bc for x in self.ups],
+                [x.inner.bc for x in self.downs],
+                gu_trellis_ptr,
+                gu_suh_ptr,
+                gu_svh_ptr
             )
+
+            # Larger buffers for fused path, if supported
+            if self.support_fused:
+                C = ext.exl3_moe_max_concurrency(torch.device(device).index)
+                self.fused_mode_buffers = FusedBuffers(
+                    temp_state_g = g_tensor_cache.get(device, (C, TEMP_ROWS_FUSED, H), torch.half, "moe2_temp_state_g"),
+                    temp_state_u = g_tensor_cache.get(device, (C, TEMP_ROWS_FUSED, H), torch.half, "moe2_temp_state_u"),
+                    temp_intermediate_g = g_tensor_cache.get(device, (C, TEMP_ROWS_FUSED, I), torch.half, "moe2_temp_intermediate_g"),
+                    temp_intermediate_u = g_tensor_cache.get(device, (C, TEMP_ROWS_FUSED, I), torch.half, "moe2_temp_intermediate_u"),
+                )
+                self.f_threshold = min(self.num_experts // self.num_experts_per_tok, 4)
+
 
 
     def load_routing(self, **kwargs):
@@ -473,13 +568,15 @@ class BlockSparseMLP(Module):
             optional = True,
             float2half = True,
         )
-        self.load_local(**kwargs)
-        self.load_routing(**kwargs)
+        if device is not None and torch.device(device).type == "cuda":
+            self.load_local(**kwargs)
+            self.load_routing(**kwargs)
 
 
     @override
     def unload(self):
         self.bc = None
+        self.fused_mode_buffers = None
         if self.multi_gate is not None:
             self.multi_gate.unload()
             self.multi_gate = None
@@ -521,60 +618,162 @@ class BlockSparseMLP(Module):
 
         # Empty slice
         if self.intermediate_size == 0 or self.num_local_experts == 0:
-            final_hidden_states = torch.zeros_like(x, dtype = self.out_dtype)
+            final_hidden_states = torch.zeros_like(x, dtype = torch.float)
 
-        # Torch path
+        # Torch/C++/fused path
         elif bsz >= self.f_threshold or not self.is_quantized:
-            final_hidden_states = torch.zeros_like(y, dtype = self.out_dtype)
+            final_hidden_states = torch.zeros_like(y, dtype = torch.float)
 
-            if self.routing_device is None or self.num_local_experts == self.num_experts:
-                expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes = self.num_local_experts)
-            else:
-                # TODO: profile, maybe optimize
-                selected_experts -= self.routing_first
-                invalid = (selected_experts < 0) | (selected_experts >= self.num_local_experts)
-                shifted = torch.where(invalid, torch.zeros_like(selected_experts), selected_experts + 1)
-                expert_mask = F.one_hot(shifted, num_classes = self.num_local_experts + 1)[..., 1:]
-                # routing_weights[invalid] = 0.0
+            # if self.routing_device is None or self.num_local_experts == self.num_experts:
+            #     expert_mask = torch.nn.functional.one_hot(selected_experts, num_classes = self.num_local_experts)
+            # else:
+            #     selected_experts -= self.routing_first
+            #     invalid = (selected_experts < 0) | (selected_experts >= self.num_local_experts)
+            #     shifted = torch.where(invalid, torch.zeros_like(selected_experts), selected_experts + 1)
+            #     expert_mask = F.one_hot(shifted, num_classes = self.num_local_experts + 1)[..., 1:]
 
             if self.num_local_experts is None or self.num_local_experts > 0:
 
                 num_ex = self.num_local_experts or self.num_experts
-                expert_count = expert_mask.view(-1, num_ex).sum(dim = 0).cpu()
-                expert_mask = expert_mask.permute(2, 1, 0)
 
-                def mlp(exp_i, xc):
-                    g = self.gates[exp_i].forward(xc, params)
-                    u = self.ups[exp_i].forward(xc, params)
-                    a = u if self.interm_dtype == torch.half else torch.empty_like(u, dtype = torch.half)
-                    self.activation_fn_call(g, u, a)
-                    return self.downs[exp_i].forward(a, params)
+                num_tokens, top_k = selected_experts.shape
+                E = self.num_local_experts
+
+                # Flatten assignments
+                flat_expert_global = selected_experts.reshape(-1)               # [num_tokens * top_k]
+                flat_weight = routing_weights.reshape(-1)                       # [num_tokens * top_k]
+
+                # Token indices corresponding to each flattened assignment
+                flat_token = torch.arange(num_tokens, device = y.device)
+                flat_token = flat_token.repeat_interleave(top_k)  # [num_tokens * top_k]
+
+                if self.routing_device is None or self.num_local_experts == self.num_experts:
+                    flat_expert_local = flat_expert_global
+                else:
+                    flat_expert_local = flat_expert_global - self.routing_first
+                    valid = (flat_expert_local >= 0) & (flat_expert_local < E)
+                    flat_expert_local = torch.where(valid, flat_expert_local, torch.full_like(flat_expert_local, E))
+
+                # Group once by local expert id (including sentinel for expert-P mode)
+                order = flat_expert_local.argsort()
+                token_sorted = flat_token[order]
+                weight_sorted = flat_weight[order]
+
+                # Count how many assignments per expert
+                expert_count = torch.bincount(flat_expert_local, minlength = E + 1)
+                expert_ptr = torch.empty(E + 2, device = y.device, dtype = torch.long)
+                expert_ptr[0] = 0
+                expert_ptr[1:] = expert_count.cumsum(0)
+                expert_ptr = expert_ptr.tolist()
+
+                # Run fused path if possible, skips experts with more than TEMP_ROWS_FUSED tokens
+                if self.fused_mode_buffers is not None:
+                    ext.exl3_moe(
+                        y,
+                        final_hidden_states,
+                        expert_count,
+                        token_sorted,
+                        weight_sorted,
+                        self.fused_mode_buffers.temp_state_g,
+                        self.fused_mode_buffers.temp_state_u,
+                        self.fused_mode_buffers.temp_intermediate_g,
+                        self.fused_mode_buffers.temp_intermediate_u,
+                        0,  # SiLU
+                        self.multi_gate.K,
+                        self.multi_up.K,
+                        self.multi_down.K,
+                        self.multi_gate.ptrs_trellis,
+                        self.multi_gate.ptrs_suh,
+                        self.multi_gate.ptrs_svh,
+                        self.multi_up.ptrs_trellis,
+                        self.multi_up.ptrs_suh,
+                        self.multi_up.ptrs_svh,
+                        self.multi_down.ptrs_trellis,
+                        self.multi_down.ptrs_suh,
+                        self.multi_down.ptrs_svh,
+                        self.multi_gate.mcg,
+                        self.multi_gate.mul1,
+                        self.multi_up.mcg,
+                        self.multi_up.mul1,
+                        self.multi_down.mcg,
+                        self.multi_down.mul1,
+                        self.act_limit
+                    )
+                    min_rows = TEMP_ROWS_FUSED
+                else:
+                    min_rows = 0
+
+                out_state = None
+                interm = None
+                interm_a = None
+                max_count = 0
 
                 for expert_idx in range(num_ex):
-                    if expert_count[expert_idx] == 0:
+                    start = expert_ptr[expert_idx]
+                    end = expert_ptr[expert_idx + 1]
+                    count = end - start
+                    if count <= min_rows:
                         continue
-                    idx, top_x = torch.where(expert_mask[expert_idx])
-                    current_state = y[None, top_x].reshape(-1, self.hidden_size)
-                    current_state = mlp(expert_idx, current_state) * routing_weights[top_x, idx, None]
+
+                    top_x = token_sorted[start:end]
+                    w = weight_sorted[start:end].unsqueeze(1)
+
+                    current_state = y.index_select(0, top_x)
+
+                    if self.bc is not None:
+                        # Graph path
+                        if count <= TEMP_ROWS_GRAPH:
+                            self.bc.run_single_expert(current_state, expert_idx)
+                            current_state = self.experts_cfg.out_d2[:count]
+
+                        # DQ path
+                        else:
+                            if count > max_count:
+                                out_state = torch.empty((count, self.hidden_size), dtype = torch.float, device = self.device)
+                                interm = torch.empty((count * 2, self.intermediate_size), dtype = self.interm_dtype, device = self.device)
+                                interm_a = interm[:count] if self.interm_dtype == torch.half else \
+                                    torch.empty_like(interm[:count], dtype = torch.half)
+                                out_state_ = out_state
+                                interm_ = interm
+                                interm_a_ = interm_a
+                                max_count = count
+                            elif count == max_count:
+                                out_state_ = out_state
+                                interm_ = interm
+                                interm_a_ = interm_a
+                            else:
+                                out_state_ = out_state[:count]
+                                interm_ = interm[:count * 2]
+                                interm_a_ = interm_a[:count]
+
+                            yh = torch.empty((count * 2, self.hidden_size), dtype = torch.half, device = self.device)
+                            self.bc.run_single_expert_dq(current_state, expert_idx, yh, interm_, interm_a_, out_state)
+                            current_state = out_state_
+                    else:
+
+                        # Torch path
+                        def mlp(exp_i, xc):
+                            g = self.gates[exp_i].forward(xc, params)
+                            u = self.ups[exp_i].forward(xc, params)
+                            a = u if self.interm_dtype == torch.half else torch.empty_like(u, dtype = torch.half)
+                            self.activation_fn_call(g, u, a, self.act_limit)
+                            return self.downs[exp_i].forward(a, params)
+
+                        current_state = mlp(expert_idx, current_state)
+
+                    current_state.mul_(w)
                     final_hidden_states.index_add_(0, top_x, current_state)
 
             final_hidden_states = final_hidden_states.reshape(x.shape)
-            final_hidden_states = to2(final_hidden_states, out_dtype, self.out_dtype)
 
-        # Fused path
+        # Fused path, few tokens
         elif bsz > 1:
 
-            final_hidden_states = torch.empty_like(y, dtype = self.out_dtype)
+            final_hidden_states = torch.empty_like(y, dtype = torch.float)
 
             y = y.unsqueeze(1).unsqueeze(1)
             selected_experts = selected_experts.unsqueeze(1)
             routing_weights = routing_weights.unsqueeze(1)
-
-            # yh = torch.empty((bsz, self.num_experts_per_tok, 1, self.hidden_size), dtype = torch.half, device = self.device)
-            # interm_g = torch.empty((bsz, self.num_experts_per_tok, 1, self.intermediate_size), dtype = self.interm_dtype, device = self.device)
-            # interm_u = torch.empty_like(interm_g)
-            # interm_a = torch.empty_like(interm_u, dtype = torch.half) if self.interm_dtype != torch.half else interm_u
-            # out_d = torch.empty((bsz, self.num_experts_per_tok, 1, self.hidden_size), dtype = self.out_dtype or torch.half, device = self.device)
 
             cfg = self.experts_cfg
 
@@ -623,7 +822,7 @@ class BlockSparseMLP(Module):
                 )
 
                 # Activation
-                self.activation_fn_call(cfg.interm_g, cfg.interm_u, cfg.interm_a)
+                self.activation_fn_call(cfg.interm_g, cfg.interm_u, cfg.interm_a, self.act_limit)
 
                 # Down
                 ext.exl3_mgemm(
@@ -698,7 +897,7 @@ class BlockSparseMLP(Module):
             )
 
             # Activation
-            self.activation_fn_call(cfg.interm_g, cfg.interm_u, cfg.interm_a)
+            self.activation_fn_call(cfg.interm_g, cfg.interm_u, cfg.interm_a, self.act_limit)
 
             # Down
             ext.exl3_mgemm(
@@ -740,6 +939,8 @@ class BlockSparseMLP(Module):
                 (self.intermediate_size > 0 and self.num_local_experts > 0) or bool(self.shared_experts)
             )
 
+        if out_dtype is not None:
+            final_hidden_states = final_hidden_states.to(out_dtype)
         return final_hidden_states
 
 
@@ -758,7 +959,7 @@ class BlockSparseMLP(Module):
         for u in self.ups: storage += u.storage_size()
         for d in self.downs: storage += d.storage_size()
         # TODO: More precise overhead estimate accounting for gate etc.
-        overhead_d = self.hidden_size * (self.out_dtype or torch.half).itemsize
+        overhead_d = self.hidden_size * torch.float.itemsize
         overhead_s = 4 * self.intermediate_size * (self.interm_dtype or torch.half).itemsize
         if self.interm_dtype != torch.half:
             overhead_s += self.intermediate_size * torch.half.itemsize
@@ -801,12 +1002,12 @@ class BlockSparseMLP(Module):
                 "activation_fn": self.activation_fn,
                 "num_experts": self.num_experts,
                 "num_experts_per_tok": self.num_experts_per_tok,
-                "out_dtype": self.out_dtype,
                 "interm_dtype": self.interm_dtype,
                 "router_type": self.router_type,
                 "routed_scaling_factor": self.routed_scaling_factor,
                 "n_group": self.n_group,
                 "topk_group": self.topk_group,
+                "act_limit": self.act_limit,
             },
             "routing_gate": _export(self.routing_gate),
             "e_score_correction_bias": producer.send(self.e_score_correction_bias),

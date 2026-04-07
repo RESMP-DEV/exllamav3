@@ -106,7 +106,8 @@ class MiniMaxM2Model(Model):
                         rms_norm_eps = config.rms_norm_eps,
                         span_heads = True,
                     ),
-                    out_dtype = torch.float
+                    out_dtype = torch.float,
+                    select_hq_bits = 2,
                 ),
                 mlp_norm = RMSNorm(
                     config = config,
@@ -165,8 +166,8 @@ class MiniMaxM2Model(Model):
         # Activate all experts during H capture pass in quantization
         self.calibration_all_experts = True
 
-        # TODO: Q/K norms span all heads, so TP requires an additional step to reduce variance across ranks
-        self.caps.update({"supports_tp": False})
+        # Q/K norms span all heads - TP support uses variance all-reduce across ranks
+        self.caps.update({"supports_tp": True})
 
 
     @override

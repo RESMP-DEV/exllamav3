@@ -222,6 +222,7 @@ class Job:
 
         self.stop_tokens_list = list(self.stop_tokens)
         self.stop_strings_list = list(self.stop_strings)
+        self.stop_string_max_length = max([0] + [len(x) for x in self.stop_strings_list])
 
         # Banned strings
         if banned_strings:
@@ -272,6 +273,7 @@ class Job:
 
         # Recurrent state
         self.recurrent_state = None
+        self.last_recurrent_checkpoint_pos = None
 
 
     def get_pinned_logit_mask(self):
@@ -653,7 +655,7 @@ class Job:
             return emit(results, emit_eos = True, emit_held = True, eos_reason = "end_filter")
 
         # Hold text if it contains an incomplete character
-        if 1 <= self.held_text.count("�") < 5:
+        if self.held_text.endswith("�") and self.held_text.count("�") < 5:
             test_decode = self.generator.tokenizer.decode(
                 self.held_tokens.torch(),
                 decode_special_tokens = self.decode_special_tokens
@@ -663,7 +665,7 @@ class Job:
             else:
                 # Don't hold forever if a broken generation yields a replacement character but never completes
                 # the Unicode symbol
-                return emit(results, emit_held = (len(test_decode) > 20))
+                return emit(results, emit_held = (len(test_decode) > self.stop_string_max_length + 20))
 
         # Hold text as long as it contains part of a banned string
 
@@ -944,7 +946,7 @@ class Job:
             if prefill_end <= prefill_start:
                 continue
 
-            assert prefill_start % 256 == 0
+            assert prefill_start % PAGE_SIZE == 0
             prefill_ids = seq.sequence_ids.torch_slice(prefill_start, prefill_end)
 
             # Special case for partial last page, check if there's a page anywhere in the cache that
@@ -983,8 +985,17 @@ class Job:
                     self.cached_tokens += best_match
                     progress += best_match
 
-            # Inference
+            # For recurrent models, do a separate forward pass for the last page to get the latest possible checkpoint
+            recurrent_last_page = False
+            if self.generator.recurrent_cache is not None:
+                seqlen = len(seq.sequence_ids) - 1
+                last_page_b = seqlen // PAGE_SIZE * PAGE_SIZE
+                if prefill_start < last_page_b <= prefill_end:
+                    prefill_end = last_page_b
+                    recurrent_last_page = True
+                    prefill_ids = seq.sequence_ids.torch_slice(prefill_start, prefill_end)
 
+            # Inference
             if prefill_end > prefill_start:
 
                 if self.generator.draft_model:
@@ -1029,8 +1040,12 @@ class Job:
                     page.can_revert = False
 
                 progress += prefill_end - prefill_start
-                if progress >= len(seq.sequence_ids) - 1:
+                if self.sequences[0].kv_position >= len(seq.sequence_ids) - 1:
                     seq.prefill_complete = True
+
+                if recurrent_last_page:
+                    self.maybe_stash_recurrent(self.generator.recurrent_cache, PAGE_SIZE)
+
 
         if progress:
             r = {
@@ -1091,11 +1106,15 @@ class Job:
 
     def maybe_stash_recurrent(self, cache, interval):
         seq = self.sequences[0]
-        if seq.kv_position % interval == 0:
+        if seq.kv_position % interval == 0 and \
+            self.last_recurrent_checkpoint_pos != seq.kv_position:
+            self.last_recurrent_checkpoint_pos = seq.kv_position
             last_page = (seq.kv_position - 1) // PAGE_SIZE
             page = seq.allocated_pages[last_page]
             assert page.kv_position == PAGE_SIZE
             cache.stash(page.phash, self.recurrent_state)
+            # Prevent setting the same checkpoint twice in a row if prefill ends on the first page of a chunk
+            self.last_recurrent_checkpoint_pos = seq.kv_position
 
     def free_recurrent_state(self):
         self.recurrent_state = None

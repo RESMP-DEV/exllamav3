@@ -26,6 +26,7 @@
 #include "quant/exl3_kernel_map.cuh"
 #include "quant/util.cuh"
 #include "quant/exl3_devctx.cuh"
+#include "quant/exl3_moe.cuh"
 
 #include "generator/strings.h"
 #include "generator/sampling_basic.cuh"
@@ -107,6 +108,7 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
     m.def("add", &add, "add");
 
     m.def("gated_delta_net_fused_op", &gated_delta_net_fused_op, "gated_delta_net_fused_op");
+    m.def("gated_delta_net_fused_op_2", &gated_delta_net_fused_op_2, "gated_delta_net_fused_op_2");
     m.def("cuda_recurrent_gated_delta_rule", &cuda_recurrent_gated_delta_rule, "cuda_recurrent_gated_delta_rule");
 
     m.def("argmax_sample", &argmax_sample, "argmax_sample");
@@ -132,6 +134,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
     m.def("histogram", &histogram, "histogram");
 
     m.def("blocksparse_mlp_routing", &blocksparse_mlp_routing, "blocksparse_mlp_routing");
+    m.def("exl3_moe_max_concurrency", &exl3_moe_max_concurrency, "exl3_moe_max_concurrency");
+    m.def("exl3_moe", &exl3_moe, "exl3_moe");
 
     #include "libtorch/linear_bc.h"
     #include "libtorch/gated_delta_net_bc.h"

@@ -8,7 +8,6 @@ from . import Module
 from .quant import LinearFP16, LinearEXL3
 from .quant.exl3_lib import quantize_exl3
 from ..ext import exllamav3_ext as ext
-from ..conversion.allocation import allocate_linear
 from ..model.model_tp_alloc import TPAllocation
 
 
@@ -21,9 +20,8 @@ class Linear(Module):
         in_features: int,
         out_features: int,
         qmap: str | None = None,
-        alt_key: str | None = None,
+        alt_key: str | list | None = None,
         qbits_key: str = "bits",
-        qbits_mod_key: str = "",
         fkey : str | None = None,
         frange: tuple[int, int] | None = None,
         fidx: int | None = None,
@@ -37,7 +35,10 @@ class Linear(Module):
         out_dtype: torch.dtype | None = None,
         allow_input_padding: bool = False,
         post_scale: float = 1.0,
-        transposed_load: bool = True
+        transposed_load: bool = True,
+        transpose_fused_weights: bool = True,
+        select_hq_bits: int = 0,
+        qgroup: str = None
     ):
         super().__init__(config, key, qmap)
 
@@ -52,7 +53,6 @@ class Linear(Module):
         self.first_out_feature = first_out_feature if first_out_feature is not None else 0
         self.inner = None
         self.qbits_key = qbits_key
-        self.qbits_mod_key = qbits_mod_key
         self.fkey = fkey
         self.frange = frange
         self.fidx = fidx
@@ -62,6 +62,9 @@ class Linear(Module):
         self.out_dtype = out_dtype
         self.post_scale = post_scale
         self.transposed_load = transposed_load
+        self.transpose_fused_weights = transpose_fused_weights
+        self.select_hq_bits = select_hq_bits
+        self.qgroup = qgroup or key
 
         assert self.in_features_unpadded == self.in_features or allow_input_padding, \
             f"Input padding is not allowed for {self.key}, in_dim: {self.in_features_unpadded}, pad_to: {pad_to}"
@@ -117,24 +120,32 @@ class Linear(Module):
         return weight.view(ws).half()
 
 
-    def load_fp16(self, key: str) -> bool:
+    def load_fp16(self, key: str | list[str]) -> bool:
 
         if self.config.stc.has_tensor_group(key, ["weight"]):
 
             self.used_alt_key = key == self.alt_key
-            dev = "cpu" if self.is_sliced else self.device
-            pad1 = (self.out_features,) if not self.is_sliced else None
-            pad2 = (self.in_features, self.out_features) if not self.is_sliced else None
-            scale = self.config.stc.get_tensor(key + ".weight_scale", dev, transpose = self.transposed_load, optional = True, no_defer = True)
-            scale_inv = self.config.stc.get_tensor(key + ".weight_scale_inv", dev, transpose = self.transposed_load, optional = True, no_defer = True)
-            assert scale is None or scale_inv is None
-            no_defer = scale is not None or scale_inv is not None
-            weight = self.config.stc.get_tensor(key + ".weight", dev, float2half = True, transpose = self.transposed_load, pad_to = pad2, no_defer = no_defer)
-            bias = self.config.stc.get_tensor(key + ".bias", dev, float2half = True, optional = True, pad_to = pad1)
-            if scale is not None:
-                weight = self.apply_fp8_scales_(weight, scale)
-            elif scale_inv is not None:
-                weight = self.apply_fp8_scales_inv_(weight, scale_inv)
+            if self.used_alt_key and isinstance(key, list):
+                dev = self.device
+                weight = [self.config.stc.get_tensor(k + ".weight", dev, float2half = True, transpose = self.transposed_load, no_defer = True) for k in key]
+                bias = [self.config.stc.get_tensor(k + ".bias", dev, float2half = True, optional = True, no_defer = True) for k in key]
+                weight = torch.cat(weight, dim = -1)
+                bias = torch.cat(bias, dim = -1) if bias[0] is not None else None
+            else:
+                dev = "cpu" if self.is_sliced else self.device
+                pad1 = (self.out_features,) if not self.is_sliced else None
+                pad2 = (self.in_features, self.out_features) if not self.is_sliced else None
+                scale = self.config.stc.get_tensor(key + ".weight_scale", dev, transpose = self.transposed_load, optional = True, no_defer = True)
+                scale_inv = self.config.stc.get_tensor(key + ".weight_scale_inv", dev, transpose = self.transposed_load, optional = True, no_defer = True)
+                assert scale is None or scale_inv is None
+                no_defer = scale is not None or scale_inv is not None
+                weight = self.config.stc.get_tensor(key + ".weight", dev, float2half = True, transpose = self.transposed_load, pad_to = pad2, no_defer = no_defer)
+                bias = self.config.stc.get_tensor(key + ".bias", dev, float2half = True, optional = True, pad_to = pad1)
+                if scale is not None:
+                    weight = self.apply_fp8_scales_(weight, scale)
+                elif scale_inv is not None:
+                    weight = self.apply_fp8_scales_inv_(weight, scale_inv)
+
             self.inner = LinearFP16(
                 self.in_features,
                 self.out_features,
@@ -160,7 +171,7 @@ class Linear(Module):
             weight = self.config.stc.get_tensor(
                 self.fkey,
                 self.device,
-                transpose = self.transposed_load,
+                transpose = self.transpose_fused_weights,
                 no_defer = True,
                 fidx = self.fidx
             )
@@ -341,6 +352,9 @@ class Linear(Module):
             key = self.key
         )
 
+        if quant_args["q_fallback"]:
+            proxy_err = 0.0
+
         if return_weight_q:
             return proxy_err, weight_q
         else:
@@ -392,14 +406,6 @@ class Linear(Module):
         if self.post_scale != 1.0:
             x *= self.post_scale
         return x
-
-
-    def allocate_q(self, quant_args: dict, surplus_bits: int):
-        return allocate_linear(
-            quant_args[self.qbits_key],
-            surplus_bits,
-            self
-        )
 
 
     def quant_format_id(self):

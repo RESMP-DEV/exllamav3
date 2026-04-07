@@ -280,19 +280,30 @@ class GatedDeltaNet(Module):
         num_v_heads: int,
         rms_norm_eps: float,
         conv_kernel_size: int,
+        beta_scale: float = 1.0,
         key_a_log: str | None = None,
         key_dt_bias: str | None = None,
         key_conv1d: str | None = None,
+        key_conv1d_q: str | None = None,
+        key_conv1d_k: str | None = None,
+        key_conv1d_v: str | None = None,
         key_fused_ba: str | None = None,
         key_fused_qkvz: str | None = None,
+        key_qkv: str | None = None,
+        key_qkv_alt: list | None = None,
+        key_z: str | None = None,
+        key_b: str | None = None,
+        key_a: str | None = None,
         key_norm: str | None = None,
         key_o: str | None = None,
         qmap: str | None = None,
         out_dtype: torch.dtype | None = None,
+        select_hq_bits: int = 0,
     ):
         super().__init__(config, key, None)
         self.module_name = "GatedDeltaNet"
 
+        self.q_priority = 1 + select_hq_bits
         self.layer_idx = layer_idx
         self.hidden_size = hidden_size
         self.k_head_dim = k_head_dim
@@ -304,6 +315,7 @@ class GatedDeltaNet(Module):
         self.conv_kernel_size = conv_kernel_size
         self.k_dim = self.k_head_dim * self.num_k_heads
         self.v_dim = self.v_head_dim * self.num_v_heads
+        self.beta_scale = beta_scale
 
         self.out_dtype = out_dtype
 
@@ -311,11 +323,55 @@ class GatedDeltaNet(Module):
         self.fdim_ba = 2 * self.num_v_heads
         self.fdim_qkv = 2 * self.num_k_heads * self.k_head_dim + self.num_v_heads * self.v_head_dim
 
+        if key_qkv or key_z:
+            assert key_qkv and key_z, \
+                "GatedDeltaNet split qkv/z projections require both key_qkv and key_z"
+        if key_b or key_a:
+            assert key_b and key_a, \
+                "GatedDeltaNet split b/a projections require both key_b and key_a"
+
         if key_fused_qkvz:
-            self.qkvz_proj = Linear(config, f"{key}.{key_fused_qkvz}", hidden_size, self.fdim_qkvz, qmap = qmap + ".input", out_dtype = torch.float)
+            self.qkvz_proj = Linear(
+                config,
+                f"{key}.{key_fused_qkvz}",
+                hidden_size,
+                self.fdim_qkvz,
+                qmap = qmap + ".input",
+                out_dtype = torch.float,
+                select_hq_bits = select_hq_bits,
+                qgroup = key + ".qkvz",
+            )
             self.register_submodule(self.qkvz_proj)
         else:
             self.qkvz_proj = None
+
+        if key_qkv:
+            self.qkv_proj = Linear(
+                config,
+                f"{key}.{key_qkv}",
+                hidden_size,
+                self.fdim_qkv,
+                qmap = qmap + ".input",
+                out_dtype = torch.float,
+                alt_key = None if not key_qkv_alt else [f"{key}.{x}" for x in key_qkv_alt],
+                select_hq_bits = select_hq_bits,
+                qgroup = key + ".qkvz",
+            )
+            self.z_proj = Linear(
+                config,
+                f"{key}.{key_z}",
+                hidden_size,
+                self.v_dim,
+                qmap = qmap + ".input",
+                out_dtype = torch.float,
+                select_hq_bits = select_hq_bits,
+                qgroup = key + ".qkvz",
+            )
+            self.register_submodule(self.qkv_proj)
+            self.register_submodule(self.z_proj)
+        else:
+            self.qkv_proj = None
+            self.z_proj = None
 
         if key_fused_ba:
             self.ba_proj = Linear(config, f"{key}.{key_fused_ba}", hidden_size, self.fdim_ba, qmap = None, out_dtype = torch.float, pad_to = 1)
@@ -323,7 +379,25 @@ class GatedDeltaNet(Module):
         else:
             self.ba_proj = None
 
-        self.o_proj = Linear(config, f"{key}.{key_o}", 2 * hidden_size, hidden_size, qmap = qmap + ".output", out_dtype = self.out_dtype)
+        if key_b:
+            self.b_proj = Linear(config, f"{key}.{key_b}", hidden_size, self.num_v_heads, qmap = None, out_dtype = torch.float, pad_to = 1)
+            self.a_proj = Linear(config, f"{key}.{key_a}", hidden_size, self.num_v_heads, qmap = None, out_dtype = torch.float, pad_to = 1)
+            self.register_submodule(self.b_proj)
+            self.register_submodule(self.a_proj)
+        else:
+            self.b_proj = None
+            self.a_proj = None
+
+        self.o_proj = Linear(
+            config,
+            f"{key}.{key_o}",
+            self.v_head_dim * self.num_v_heads,
+            hidden_size,
+            qmap = qmap + ".output",
+            out_dtype = self.out_dtype,
+            select_hq_bits = select_hq_bits,
+            qgroup = key + ".o",
+        )
         self.register_submodule(self.o_proj)
 
         self.norm = GatedRMSNorm(config, f"{key}.{key_norm}", self.rms_norm_eps, out_dtype = torch.half)
@@ -333,10 +407,16 @@ class GatedDeltaNet(Module):
         self.dt_bias = None
         self.conv1d_weight = None
         self.conv1d_bias = None
+        self.conv1d_q_weight = None
+        self.conv1d_k_weight = None
+        self.conv1d_v_weight = None
         self.key_a_log = f"{key}.{key_a_log}"
         self.key_dt_bias = f"{key}.{key_dt_bias}"
         self.key_conv1d_weight = f"{key}.{key_conv1d}.weight"
         self.key_conv1d_bias = f"{key}.{key_conv1d}.bias"
+        self.key_conv1d_q_weight = f"{key}.{key_conv1d_q}.weight" if key_conv1d_q else None
+        self.key_conv1d_k_weight = f"{key}.{key_conv1d_k}.weight" if key_conv1d_k else None
+        self.key_conv1d_v_weight = f"{key}.{key_conv1d_v}.weight" if key_conv1d_v else None
 
         self.conv_dim = self.k_head_dim * self.num_k_heads
 
@@ -356,8 +436,15 @@ class GatedDeltaNet(Module):
 
     @override
     def optimizer_targets(self):
-        qkvz = self.qkvz_proj.optimizer_targets()
-        return [[qkvz]]
+        if self.qkvz_proj is not None:
+            return [[self.qkvz_proj.optimizer_targets()]]
+
+        targets = []
+        if self.qkv_proj is not None:
+            targets += self.qkv_proj.optimizer_targets()
+        if self.z_proj is not None:
+            targets += self.z_proj.optimizer_targets()
+        return [targets]
 
 
     def load_local(self, device, **kwargs):
@@ -394,7 +481,8 @@ class GatedDeltaNet(Module):
                 self.conv1d_weight,
                 self.conv1d_bias,
                 self.norm.bc,
-                self.o_proj.inner.bc
+                self.o_proj.inner.bc,
+                self.beta_scale
             )
 
     @override
@@ -402,22 +490,29 @@ class GatedDeltaNet(Module):
         super().load(device)
         self.a_log = self.config.stc.get_tensor(self.key_a_log, self.device, optional = False, allow_bf16 = True)
         self.dt_bias = self.config.stc.get_tensor(self.key_dt_bias, self.device, optional = False, allow_bf16 = True)
-        self.conv1d_weight = self.config.stc.get_tensor(self.key_conv1d_weight, self.device, optional = False, allow_bf16 = True)
+        self.conv1d_weight = self.config.stc.get_tensor(self.key_conv1d_weight, self.device, optional = True, allow_bf16 = True)
         self.conv1d_bias = self.config.stc.get_tensor(self.key_conv1d_bias, self.device, optional = True, allow_bf16 = True)
+        if self.conv1d_weight is None:
+            self.conv1d_q_weight = self.config.stc.get_tensor(self.key_conv1d_q_weight, self.device, optional = False, allow_bf16 = True)
+            self.conv1d_k_weight = self.config.stc.get_tensor(self.key_conv1d_k_weight, self.device, optional = False, allow_bf16 = True)
+            self.conv1d_v_weight = self.config.stc.get_tensor(self.key_conv1d_v_weight, self.device, optional = False, allow_bf16 = True)
         self.norm.load(device, **kwargs)
         self.load_local(device, **kwargs)
 
     @override
     def unload(self):
         if self.bc is not None:
-            for arg in self.bsz1_pa_args:
-                g_tensor_cache.drop(*arg)
+            # for arg in self.bsz1_pa_args:
+            #     g_tensor_cache.drop(*arg)
             self.bc = None
             self.bsz1_pa_args = []
         self.a_log = None
         self.dt_bias = None
         self.conv1d_weight = None
         self.conv1d_bias = None
+        self.conv1d_q_weight = None
+        self.conv1d_k_weight = None
+        self.conv1d_v_weight = None
         self.norm.unload()
         super().unload()
 
@@ -474,6 +569,17 @@ class GatedDeltaNet(Module):
 
         bsz, seqlen, _ = x.shape
 
+        # Post load, fuse conv1d weights if needed
+        if self.conv1d_weight is None:
+            self.conv1d_weight = torch.cat([
+                self.conv1d_q_weight,
+                self.conv1d_k_weight,
+                self.conv1d_v_weight,
+            ], dim = 0)
+            self.conv1d_q_weight = None
+            self.conv1d_k_weight = None
+            self.conv1d_v_weight = None
+
         # Previous state
         rs = params.get("recurrent_states")
         if rs is not None:
@@ -509,26 +615,54 @@ class GatedDeltaNet(Module):
         # Torch path
         else:
             # Projections
-            qkvz = self.qkvz_proj.forward(x, params)
-            ba = self.ba_proj.forward(x, params)
+            #
+            # NOTE:
+            # Qwen3.5 uses split projections (in_proj_qkv/in_proj_z/in_proj_b/in_proj_a),
+            # while Qwen3-Next uses fused projections. The fused C++ helper expects the
+            # packed layout used by fused projections; applying it to split qkv tensors
+            # causes incorrect head ordering and broken generations.
+            if self.qkvz_proj is not None and self.ba_proj is not None:
+                qkvz = self.qkvz_proj.forward(x, params)
+                ba = self.ba_proj.forward(x, params)
 
-            mixed_qkv = torch.zeros((bsz, self.fdim_qkv, seqlen), dtype = torch.bfloat16, device = self.device)
-            z = torch.zeros((bsz, seqlen, self.num_v_heads, self.v_head_dim), dtype = torch.bfloat16, device = self.device)
-            beta = torch.zeros((bsz, seqlen, self.num_v_heads), dtype = torch.bfloat16, device = self.device)
-            g = torch.zeros((bsz, seqlen, self.num_v_heads), dtype = torch.float, device = self.device)
+                mixed_qkv = torch.empty((bsz, self.fdim_qkv, seqlen), dtype = torch.bfloat16, device = self.device)
+                z = torch.empty((bsz, seqlen, self.num_v_heads, self.v_head_dim), dtype = torch.bfloat16, device = self.device)
+                beta = torch.empty((bsz, seqlen, self.num_v_heads), dtype = torch.bfloat16, device = self.device)
+                g = torch.empty((bsz, seqlen, self.num_v_heads), dtype = torch.float, device = self.device)
 
-            ext.gated_delta_net_fused_op(
-                qkvz, ba,
-                self.dt_bias,
-                self.a_log,
-                mixed_qkv, z, beta, g,
-                self.num_k_heads,
-                self.num_v_heads,
-                self.k_head_dim,
-                self.v_head_dim
-            )
+                ext.gated_delta_net_fused_op(
+                    qkvz, ba,
+                    self.dt_bias,
+                    self.a_log,
+                    mixed_qkv, z, beta, g,
+                    self.num_k_heads,
+                    self.num_v_heads,
+                    self.k_head_dim,
+                    self.v_head_dim,
+                    self.beta_scale
+                )
+            else:
+                # TODO: Bound class and/or graph for this part
+                qkv = self.qkv_proj.forward(x, params)
+                z = self.z_proj.forward(x, params).view(bsz, seqlen, self.num_v_heads, self.v_head_dim)
+                b = self.b_proj.forward(x, params)
+                a = self.a_proj.forward(x, params)
+
+                mixed_qkv = qkv.transpose(1, 2).to(torch.bfloat16).contiguous()
+
+                beta = torch.empty((bsz, seqlen, self.num_v_heads), dtype = torch.bfloat16, device = self.device)
+                g = torch.empty((bsz, seqlen, self.num_v_heads), dtype = torch.float, device = self.device)
+
+                ext.gated_delta_net_fused_op_2(
+                    b, a,
+                    self.dt_bias,
+                    self.a_log,
+                    beta, g,
+                    self.beta_scale
+                )
 
             # Convolution
+            # TODO: Figure out an alternative or write a new kernel that won't require transposing qkv back and forth
             if conv_state is None:
                 if save_state:
                     conv_state = F.pad(mixed_qkv, (self.conv_kernel_size - mixed_qkv.shape[-1], 0))
@@ -546,8 +680,9 @@ class GatedDeltaNet(Module):
                     self.conv1d_bias,
                 )
 
-            # Use chunked rule when advantageous
-            if seqlen >= 32:
+            # Use chunked rule when advantageous and available
+            # TODO: Replace chunked fn with non-Triton implementation
+            if seqlen >= self.num_v_heads and chunk_gated_delta_rule is not None:
                 mixed_qkv = mixed_qkv.transpose(1, 2)
 
                 q, k, v = torch.split(mixed_qkv, [self.k_dim, self.k_dim, self.v_dim], dim = -1)
@@ -577,6 +712,12 @@ class GatedDeltaNet(Module):
                 )
 
                 mixed_qkv = mixed_qkv.transpose(1, 2).contiguous()
+                if recurrent_state is None:
+                    recurrent_state = torch.zeros(
+                        (bsz, self.num_v_heads, self.k_head_dim, self.v_head_dim),
+                        dtype = torch.float,
+                        device = self.device
+                    )
                 ext.cuda_recurrent_gated_delta_rule(
                     mixed_qkv,
                     g,
