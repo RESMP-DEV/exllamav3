@@ -1,6 +1,6 @@
 import os
-from functools import lru_cache
 import time
+from functools import lru_cache
 
 _col_log = "\u001b[33;1m"  # Yellow
 _col_default = "\u001b[0m"

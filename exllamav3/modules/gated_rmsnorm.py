@@ -1,12 +1,15 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
 import torch.nn.functional as F
 from torch import nn
-from ..model.config import Config
-from . import Module
+from typing_extensions import override
+
 from ..ext import exllamav3_ext as ext
+from ..model.config import Config
 from ..model.model_tp_alloc import TPAllocation
+from . import Module
+
 
 class GatedRMSNorm(Module):
 

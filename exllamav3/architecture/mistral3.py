@@ -1,31 +1,36 @@
 from __future__ import annotations
-from typing_extensions import override
-import os, json
+
+import json
+import os
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
+
 import numpy as np
 import torch
 import torch.nn.functional as F
+from PIL import Image
+from typing_extensions import override
+
 from ..model.config import Config
 from ..model.model import Model
-from ..util.rope import RopeSettings, RopeStyle
-from ..util.file import read_dict, no_default
-from ..util.vision import size_to_longest_edge_and_patch_size, convert_to_rgb, normalize_image
-from ..util.tensor import to2
 from ..modules import (
-    Module,
-    RMSNorm,
-    Embedding,
-    TransformerBlock,
+    MLP,
     Attention,
+    Conv,
+    Embedding,
     GatedMLP,
     Linear,
-    Conv,
-    MLP,
+    Module,
+    RMSNorm,
+    TransformerBlock,
 )
 from ..modules.attn import prepare_for_attn
-from ..tokenizer import Tokenizer, MMEmbedding
-from types import SimpleNamespace
-from PIL import Image
-from typing import TYPE_CHECKING
+from ..tokenizer import MMEmbedding, Tokenizer
+from ..util.file import no_default, read_dict
+from ..util.rope import RopeSettings, RopeStyle
+from ..util.tensor import to2
+from ..util.vision import convert_to_rgb, normalize_image, size_to_longest_edge_and_patch_size
+
 if TYPE_CHECKING:
     from .ministral3 import Ministral3Config
 
@@ -82,7 +87,7 @@ class Mistral3Config(Config):
         self.vision.num_kv_heads = self.read_cfg(int, ["vision_config->num_key_value_heads"], self.vision.num_q_heads)
         self.vision.multimodal_projector_bias = self.read_cfg(bool, ["multimodal_projector_bias"], False)
         self.vision.hidden_size = self.read_cfg(int, ["vision_config->hidden_size"], no_default)
-        self.vision.patch_size = unpack_patch_size(self.read_cfg(object, ["vision_config->patch_size"], int(14)))
+        self.vision.patch_size = unpack_patch_size(self.read_cfg(object, ["vision_config->patch_size"], 14))
         self.vision.num_hidden_layers = self.read_cfg(int, ["vision_config->num_hidden_layers"], 24)
         self.vision.intermediate_size = self.read_cfg(int, ["vision_config->intermediate_size"], no_default)
         self.vision.merger_intermediate_size = self.vision.intermediate_size
@@ -316,7 +321,7 @@ class Mistral3VisionModel(Model):
             ),
              RMSNorm(
                 config = config,
-                key = key_prefix + f"ln_pre",
+                key = key_prefix + "ln_pre",
                 rms_norm_eps = config.rms_norm_eps,
             )
         ]
@@ -372,7 +377,7 @@ class Mistral3VisionModel(Model):
         self.modules += [
             RMSNorm(
                 config = config,
-                key = f"multi_modal_projector.norm",
+                key = "multi_modal_projector.norm",
                 rms_norm_eps = config.vision.rms_norm_eps,
                 out_dtype = torch.half,
             ),

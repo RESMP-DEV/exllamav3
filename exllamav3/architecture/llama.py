@@ -1,11 +1,14 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
+from typing_extensions import override
+
 from ..model.config import Config, no_default
 from ..model.model import Model
-from ..util.rope import RopeStyle
-from ..modules import RMSNorm, Embedding, TransformerBlock, Attention, GatedMLP, Linear
+from ..modules import Attention, Embedding, GatedMLP, Linear, RMSNorm, TransformerBlock
 from ..modules.attn import prepare_for_attn
+from ..util.rope import RopeStyle
+
 
 class LlamaConfig(Config):
     arch_string = "LlamaForCausalLM"
@@ -155,5 +158,5 @@ class LlamaModel(Model):
         if system_prompt:
             p += f"<|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>"
         p += f"<|start_header_id|>user<|end_header_id|>\n\n{prompt}<|eot_id|>"
-        p += f"<|start_header_id|>assistant<|end_header_id|>\n\n"
+        p += "<|start_header_id|>assistant<|end_header_id|>\n\n"
         return p

@@ -1,8 +1,10 @@
 from __future__ import annotations
+
 from ..model.config import Config
-from ..util.rope import RopeStyle
 from ..util.file import no_default
+from ..util.rope import RopeStyle
 from .mistral3 import Mistral3Model
+
 
 class Ministral3Config(Config):
     arch_string = "Ministral3ForCausalLM"

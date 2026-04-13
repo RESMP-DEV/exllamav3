@@ -1,20 +1,25 @@
 from __future__ import annotations
-from functools import lru_cache
-import torch
+
 import hashlib
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import TYPE_CHECKING
+
+import torch
+
 from ..cache.cache import Cache
+
 if TYPE_CHECKING:
     from .generator import Generator
-from ..constants import PAGE_SIZE
-from collections import deque, defaultdict
-from itertools import pairwise
-from ..util.tensor import SeqTensor
-from exllamav3.ext import exllamav3_ext as ext
 import time
+from collections import defaultdict, deque
+from itertools import pairwise
+
+from exllamav3.ext import exllamav3_ext as ext
+
 from ..cache import RecurrentCache
-from ..util import profile_opt
+from ..constants import PAGE_SIZE
+from ..util.tensor import SeqTensor
 
 
 def _tensor_blake2b_checksum(tensor: torch.Tensor, prev_hash: bytes | None) -> bytes:

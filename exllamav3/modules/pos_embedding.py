@@ -1,11 +1,14 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
 from torch import nn
+from typing_extensions import override
+
 from ..model.config import Config
-from . import Module
-from ..util.tensor import to2
 from ..model.model_tp_alloc import TPAllocation
+from ..util.tensor import to2
+from . import Module
+
 
 class PosEmbedding(Module):
 

@@ -1,13 +1,24 @@
 from __future__ import annotations
-from typing_extensions import override
-import torch
-from ..model.config import Config, no_default
-from ..model.model import Model
-from ..util.rope import RopeStyle
-from ..modules import RMSNorm, Embedding, TransformerBlock, Attention, GatedMLP, Linear, BlockSparseMLP
-from ..modules.attn import prepare_for_attn
 
 from typing import TYPE_CHECKING
+
+import torch
+from typing_extensions import override
+
+from ..model.config import Config, no_default
+from ..model.model import Model
+from ..modules import (
+    Attention,
+    BlockSparseMLP,
+    Embedding,
+    GatedMLP,
+    Linear,
+    RMSNorm,
+    TransformerBlock,
+)
+from ..modules.attn import prepare_for_attn
+from ..util.rope import RopeStyle
+
 if TYPE_CHECKING:
     from .glm4v_moe import Glm4VMoeConfig
 
@@ -213,9 +224,9 @@ class Glm4MoeModel(Model):
 
     @override
     def default_chat_prompt(self, prompt: str, system_prompt: str = None) -> str:
-        p = f"[gMASK]<sop>"
+        p = "[gMASK]<sop>"
         if system_prompt:
             p += f"<|system|>\n{system_prompt}"
         p += f"<|user|>\n{prompt}"
-        p += f"<|assistant|>\n"
+        p += "<|assistant|>\n"
         return p

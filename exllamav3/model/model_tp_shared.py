@@ -1,9 +1,12 @@
 from __future__ import annotations
-import torch
-import numpy as np
-from multiprocessing import shared_memory
+
 import uuid
-from .model_tp_cuda import cuda_host_register, cuda_host_unregister, CUDA_HOST_REGISTER_PORTABLE
+from multiprocessing import shared_memory
+
+import numpy as np
+import torch
+
+from .model_tp_cuda import CUDA_HOST_REGISTER_PORTABLE, cuda_host_register, cuda_host_unregister
 
 DEFAULT_BUFFER_SIZE = 2 * 1024 ** 3
 MAX_CACHE_PER_PROCESS = 4 * 1024**3

@@ -1,6 +1,10 @@
-from ..model import Config, Model
-import os, json
+import json
+import os
+
 import torch
+
+from ..model import Config, Model
+
 
 def update_config(
     config_dict: dict
@@ -49,7 +53,7 @@ def create_quantization_config_json(
         storage_dict[module.key] = module_dict
 
     # Grab quantization_config from config.json
-    with open(os.path.join(model_dir, "config.json"), "r") as f:
+    with open(os.path.join(model_dir, "config.json")) as f:
         config_dict = json.load(f)
         assert "quantization_config" in config_dict, f"{model_dir} does not appear to be a quantized model"
         quantization_config = config_dict["quantization_config"]

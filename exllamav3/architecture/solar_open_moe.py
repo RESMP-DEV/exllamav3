@@ -1,5 +1,5 @@
-from typing_extensions import override
 from .glm4_moe import Glm4MoeConfig, Glm4MoeModel
+
 
 class SolarOpenMoeConfig(Glm4MoeConfig):
     arch_string = "SolarOpenForCausalLM"

@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 from abc import ABC, abstractmethod
-from typing import Type
-import torch
-from ..model import Model, Config
 from typing import TYPE_CHECKING
+
+import torch
+
+from ..model import Config, Model
+
 if TYPE_CHECKING:
     from ..modules import Attention
 
@@ -78,7 +81,7 @@ class Cache:
         self,
         model: Model,
         max_num_tokens: int,
-        layer_type: Type[CacheLayer] | None = None,
+        layer_type: type[CacheLayer] | None = None,
         **kwargs
     ):
         """

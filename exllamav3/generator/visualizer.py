@@ -1,6 +1,7 @@
 from __future__ import annotations
-from collections import deque
+
 import math
+from collections import deque
 
 """
 Quick and dirty visualizer for the paged cache, for debug purposes. Horribly slow and should probably be

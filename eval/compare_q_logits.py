@@ -1,14 +1,14 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse
-from exllamav3 import Config, Model, Cache, Tokenizer, model_init
-import torch
-import torch.nn.functional as F
-import math
 import json
 
+import torch
 from compare_q import get_test_data, save_tensor
+from exllamav3 import Config, Model
 
 # ANSI codes
 ESC = "\u001b"
@@ -33,7 +33,7 @@ def stream_forward(args, config, model, batch):
         config.stc.end_deferred_load()
 
         # Forward pass
-        print(f" -- Forward pass")
+        print(" -- Forward pass")
         params = {}
         state = module.prepare_for_device(state, params)
         state = module.forward(state, params)
@@ -54,7 +54,7 @@ def main(args):
     model = Model.from_config(config)
 
     # Input state
-    with open(args.dataspec, "r", encoding = "utf8") as f:
+    with open(args.dataspec, encoding = "utf8") as f:
         data_spec = json.load(f)
     eval_ids = get_test_data(data_spec)
     eval_ids = eval_ids[:args.rows]
@@ -72,7 +72,7 @@ def main(args):
 
     print(f" -- Writing {args.out_logits}")
     save_tensor(collect_logits, args.out_logits)
-    print(f" -- Done")
+    print(" -- Done")
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

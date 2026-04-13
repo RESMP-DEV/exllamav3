@@ -1,5 +1,6 @@
-from ..util.misc import ratio_split
 import heapq
+
+from ..util.misc import ratio_split
 
 
 def top_k_mask_(lst, k):

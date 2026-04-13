@@ -1,17 +1,17 @@
 from __future__ import annotations
-from typing_extensions import override
-import torch
-import torch.nn.functional as F
-from ..model.config import Config
-from ..util.tensor import to2
-from . import Module, Linear
-from .multilinear import MultiLinear
-from ..ext import exllamav3_ext as ext
+
 from dataclasses import dataclass
-from .mlp import MLP, GatedMLP
+
+import torch
+from typing_extensions import override
+
+from ..ext import exllamav3_ext as ext
+from ..model.config import Config
 from ..model.model_tp_alloc import TPAllocation
-from ..util import profile_opt
 from ..util.tensor import g_tensor_cache
+from . import Linear, Module
+from .mlp import MLP, GatedMLP
+from .multilinear import MultiLinear
 
 TEMP_ROWS_FUSED = 128
 TEMP_ROWS_GRAPH = 32
@@ -220,10 +220,10 @@ class BlockSparseMLP(Module):
         self.topk_group = topk_group
 
         assert out_dtype in (torch.float, None), \
-            f"BlockSparseMLP output dtype must be float"
+            "BlockSparseMLP output dtype must be float"
 
         assert shared_experts is None or shared_experts.out_dtype in (torch.float, None), \
-            f"Shared experts output dtype must be float"
+            "Shared experts output dtype must be float"
 
         assert num_experts_per_tok <= TEMP_ROWS_GRAPH, \
             f"Too many experts per token, max supported is {TEMP_ROWS_GRAPH}"

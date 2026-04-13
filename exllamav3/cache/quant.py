@@ -1,14 +1,20 @@
 from __future__ import annotations
-from typing_extensions import override
+
+from typing import TYPE_CHECKING
+
 import torch
+from typing_extensions import override
+
+from exllamav3.ext import exllamav3_ext as ext
+
 from ..constants import PAGE_SIZE
 from ..model import Config
 from .cache import CacheLayer
-from typing import TYPE_CHECKING
-from exllamav3.ext import exllamav3_ext as ext
+
 if TYPE_CHECKING:
     from ..modules import Attention
 import numpy as np
+
 
 class CacheLayer_quant(CacheLayer):
 

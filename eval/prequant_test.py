@@ -1,18 +1,21 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse
-from exllamav3.util.file import disk_lru_cache
-from exllamav3.util.progress import ProgressBar
-from exllamav3.util.memory import free_mem
-from exllamav3 import Config, Model, Tokenizer
-from exllamav3.ext import exllamav3_ext as ext
-from datasets import load_dataset
-from exllamav3.modules import Linear
-from exllamav3.modules.quant.exl3_lib.quantize import regularize
+import math
+
 import torch
 import torch.nn.functional as F
-import math
+from datasets import load_dataset
+from exllamav3 import Config, Model, Tokenizer
+from exllamav3.ext import exllamav3_ext as ext
+from exllamav3.modules import Linear
+from exllamav3.modules.quant.exl3_lib.quantize import regularize
+from exllamav3.util.file import disk_lru_cache
+from exllamav3.util.memory import free_mem
+from exllamav3.util.progress import ProgressBar
 
 # ANSI codes
 ESC = "\u001b"
@@ -296,7 +299,7 @@ def main(args):
             inspect_module(args, module)
 
         # Forward pass
-        print(f" -- Forward pass")
+        print(" -- Forward pass")
         print()
         params = {}
         state = module.prepare_for_device(state, params)

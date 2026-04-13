@@ -1,14 +1,17 @@
 from __future__ import annotations
+
 from functools import cached_property
-from typing_extensions import override
-import torch
+
 import numpy as np
-from ..model.config import Config
-from . import Module
-from .quant import LinearFP16, LinearEXL3
-from .quant.exl3_lib import quantize_exl3
+import torch
+from typing_extensions import override
+
 from ..ext import exllamav3_ext as ext
+from ..model.config import Config
 from ..model.model_tp_alloc import TPAllocation
+from . import Module
+from .quant import LinearEXL3, LinearFP16
+from .quant.exl3_lib import quantize_exl3
 
 
 class Linear(Module):

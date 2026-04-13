@@ -1,16 +1,18 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import math
+
 import torch
 import torch.nn.functional as F
-from exllamav3 import Config, Model, Tokenizer
-from exllamav3.modules import TransformerBlock
-from exllamav3.util.hadamard import get_hadamard_dt
 from datasets import load_dataset
-from exllamav3.util.file import disk_lru_cache, disk_lru_cache_clear
-from flash_attn import flash_attn_func
-from ref_quant2 import quantquant
+from exllamav3 import Config, Model, Tokenizer
 from exllamav3.ext import exllamav3_ext as ext
-import math
+from exllamav3.modules import TransformerBlock
+from exllamav3.util.file import disk_lru_cache
+from exllamav3.util.hadamard import get_hadamard_dt
+from flash_attn import flash_attn_func
 
 torch.set_printoptions(precision = 8, sci_mode = False, linewidth = 200)
 
@@ -304,7 +306,7 @@ with torch.inference_mode():
             test_qkv(f"Kernel {bits} bits", q, k_kern, v_kern, ref_o, ref_scores, False, False, False)
 
         # Reference
-        test_qkv(f"Kernel ref 4 bits",
+        test_qkv("Kernel ref 4 bits",
             q,
             kernel_ref_quant(k, 4),
             kernel_ref_quant(v, 4),

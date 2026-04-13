@@ -1,5 +1,6 @@
-from collections import OrderedDict
 from abc import ABC, abstractmethod
+from collections import OrderedDict
+
 
 class CacheableState(ABC):
     def __init__(self):

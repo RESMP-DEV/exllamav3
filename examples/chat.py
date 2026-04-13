@@ -1,14 +1,18 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse
-from exllamav3 import Generator, Job, model_init
-from chat_templates import *
-from chat_util import *
-from chat_io import *
+
 import torch
 from chat_console import *
+from chat_io import *
+from chat_templates import *
+from chat_util import *
+from exllamav3 import Generator, Job, model_init
 from safetensors.torch import save_file
+
 
 @torch.inference_mode()
 def main(args):
@@ -194,7 +198,7 @@ def main(args):
                 # Retry last response
                 case "/r":
                     if len(context) == 0:
-                        print_error(f"No last prompt to replay")
+                        print_error("No last prompt to replay")
                         continue
                     else:
                         user_prompt = context[-1][0]
@@ -255,11 +259,11 @@ def main(args):
                 # Save IDs
                 case "/save_ids":
                     if last_input_ids is None:
-                        print_error(f"No IDs to save")
+                        print_error("No IDs to save")
                     else:
                         d = {"ids": last_input_ids}
                     save_file(d, "last_ids.safetensors")
-                    print_info(f"Saved IDs to last_ids.safetensors")
+                    print_info("Saved IDs to last_ids.safetensors")
                     continue
 
                 # Load conversation
@@ -280,7 +284,7 @@ def main(args):
                 # Print token IDs for last response
                 case "/t":
                     if last_tokens is None:
-                        print_error(f"No previous response to tokenize")
+                        print_error("No previous response to tokenize")
                         continue
                     print_tokens(last_tokens, tokenizer.get_id_to_piece_list())
                     continue
@@ -297,7 +301,7 @@ def main(args):
                         if save_probs:
                             print_info(f"Saving top-{save_probs} probs per token.")
                         else:
-                            print_info(f"Disabled probs")
+                            print_info("Disabled probs")
                     else:
                         print_error("Invalid argument")
                     continue
@@ -415,13 +419,13 @@ def main(args):
             if sr and args.save_svg:
                 sr = extract_svg(sr)
                 if sr: print_info(f"Found SVG: {len(sr)} characters")
-                else: print_error(f"No SVG block found")
+                else: print_error("No SVG block found")
             if sr:
                 print_info(f"Writing response to: {args.save}")
                 with open(args.save, "w") as f:
                     f.write(sr)
             else:
-                print_info(f"Nothing to write")
+                print_info("Nothing to write")
 
         context[-1] = (user_prompt, response)
 

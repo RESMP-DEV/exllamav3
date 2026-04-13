@@ -1,7 +1,10 @@
 from __future__ import annotations
-from typing_extensions import override
-from . import Module
+
 import torch
+from typing_extensions import override
+
+from . import Module
+
 
 class OutputGather(Module):
     def __init__(

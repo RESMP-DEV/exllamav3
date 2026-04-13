@@ -1,10 +1,22 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
-from ..util.tensor import to2, get_for_device
+from typing_extensions import override
+
 from ..model.config import Config
-from . import Module, RMSNorm, LayerNorm, Attention, GatedDeltaNet, GatedMLP, MLP, BlockSparseMLP, Linear
-from ..util import profile_opt
+from ..util.tensor import get_for_device, to2
+from . import (
+    MLP,
+    Attention,
+    BlockSparseMLP,
+    GatedDeltaNet,
+    GatedMLP,
+    LayerNorm,
+    Linear,
+    Module,
+    RMSNorm,
+)
+
 
 class TransformerBlock(Module):
 

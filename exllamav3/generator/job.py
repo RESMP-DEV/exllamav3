@@ -1,20 +1,25 @@
 from __future__ import annotations
-import torch
+
 from typing import TYPE_CHECKING
+
+import torch
+
 if TYPE_CHECKING:
-    from .generator import Generator
-from ..constants import PAGE_SIZE
-import numpy as np
-from .pagetable import Sequence, tensor_hash_checksum, random_hash
-from .filter import Filter
+    pass
 import random
 import time
-from ..ext import exllamav3_ext as ext
-from .sampler import Sampler, DefaultSampler
-from ..util.tensor import SeqTensor
-from ..tokenizer import MMEmbedding
 from functools import lru_cache
-from ..util import profile_opt
+
+import numpy as np
+
+from ..constants import PAGE_SIZE
+from ..ext import exllamav3_ext as ext
+from ..tokenizer import MMEmbedding
+from ..util.tensor import SeqTensor
+from .filter import Filter
+from .pagetable import Sequence, random_hash, tensor_hash_checksum
+from .sampler import DefaultSampler, Sampler
+
 
 # Convert list of strings to UTF32 format to pass by reference to partial matching function
 @lru_cache(100)
@@ -660,7 +665,7 @@ class Job:
                 self.held_tokens.torch(),
                 decode_special_tokens = self.decode_special_tokens
             )[0]
-            if not "�" in test_decode:
+            if "�" not in test_decode:
                 self.held_text = test_decode
             else:
                 # Don't hold forever if a broken generation yields a replacement character but never completes

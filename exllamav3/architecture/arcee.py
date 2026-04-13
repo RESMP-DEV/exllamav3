@@ -1,10 +1,12 @@
-from typing_extensions import override
 import torch
-from ..modules import RMSNorm, Embedding, TransformerBlock, Attention, MLP, Linear
+from typing_extensions import override
+
 from ..model.config import Config, no_default
 from ..model.model import Model
-from ..util.rope import RopeStyle
+from ..modules import MLP, Attention, Embedding, Linear, RMSNorm, TransformerBlock
 from ..modules.attn import prepare_for_attn
+from ..util.rope import RopeStyle
+
 
 class ArceeConfig(Config):
     arch_string = "ArceeForCausalLM"

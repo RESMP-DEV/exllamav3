@@ -1,11 +1,14 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
+from typing_extensions import override
+
 from ..model.config import Config, no_default
 from ..model.model import Model
-from ..util.rope import RopeStyle
-from ..modules import LayerNorm, Embedding, ParallelDecoderBlock, Attention, GatedMLP, Linear
+from ..modules import Attention, Embedding, GatedMLP, LayerNorm, Linear, ParallelDecoderBlock
 from ..modules.attn import prepare_for_attn
+from ..util.rope import RopeStyle
+
 
 class CohereConfig(Config):
     arch_string = "CohereForCausalLM"
@@ -165,5 +168,5 @@ class CohereModel(Model):
         if system_prompt:
             p += f"<|START_OF_TURN_TOKEN|><|SYSTEM_TOKEN|>{system_prompt}<|END_OF_TURN_TOKEN|>"
         p += f"<|START_OF_TURN_TOKEN|><|USER_TOKEN|>{prompt}<|END_OF_TURN_TOKEN|>"
-        p += f"<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>"
+        p += "<|START_OF_TURN_TOKEN|><|CHATBOT_TOKEN|>"
         return p

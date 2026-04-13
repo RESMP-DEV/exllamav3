@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 import io
 import json
 import os
 import struct
 from dataclasses import dataclass
+
 import torch
 
 _ST_DTYPE_TO_TORCH = {
@@ -115,7 +117,7 @@ class SafeOpen:
         self._file_size: int = 0
         self.metadata: dict = {}
 
-    def __enter__(self) -> "SafeOpen":
+    def __enter__(self) -> SafeOpen:
         self._file_size = os.path.getsize(self.path)
         self._f = open(self.path, "rb", buffering = 0)
 

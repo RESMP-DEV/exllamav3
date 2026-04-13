@@ -1,9 +1,11 @@
+import contextlib
 import math
+import socket
 import threading
 import time
-import torch
-import socket, contextlib
 import weakref
+
+import torch
 
 lock = threading.RLock()
 
@@ -63,7 +65,7 @@ def human_time(seconds: float) -> str:
         ms = "s" if minutes > 1 else ""
         return f"{minutes} minute{ms}"
     else:
-        return f"< 1 minute"
+        return "< 1 minute"
 
 
 def first_not_none(*values):
@@ -115,8 +117,9 @@ class Cleanupper:
 
 
 def set_process_priority_and_affinity():
-    import psutil, os
-    import multiprocessing as mp
+    import os
+
+    import psutil
 
     p = psutil.Process(os.getpid())
     # Try to bump priority slightly. May need sudo (?)

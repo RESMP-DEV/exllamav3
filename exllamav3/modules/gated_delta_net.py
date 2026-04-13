@@ -1,16 +1,16 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
 import torch.nn.functional as F
-from ..model.config import Config
-from ..util.tensor import get_for_device, to2
-from . import Module, Linear
-from ..ext import exllamav3_ext as ext
-from ..model.model_tp_alloc import TPAllocation
-from .gated_rmsnorm import GatedRMSNorm
+from typing_extensions import override
+
 from ..cache import CacheableState
-from ..util.tensor import g_tensor_cache
-from ..util import profile_opt
+from ..ext import exllamav3_ext as ext
+from ..model.config import Config
+from ..model.model_tp_alloc import TPAllocation
+from ..util.tensor import g_tensor_cache, to2
+from . import Linear, Module
+from .gated_rmsnorm import GatedRMSNorm
 
 """
 causal_conv1d wrappers and fallback functions 
@@ -248,10 +248,10 @@ def prepare_for_recurrence(input_ids: torch.Tensor, params: dict, model) -> torc
         if past_len > 0:
             rs = params.get("recurrent_states")
             if rs is None:
-                raise ValueError(f"Past length given, but no previous state for linear attn in params")
+                raise ValueError("Past length given, but no previous state for linear attn in params")
             for k, v in rs.items():
                 if not v.batched and v.position != past_len:
-                    raise ValueError(f"recurrent states don't match input past_len")
+                    raise ValueError("recurrent states don't match input past_len")
         else:
             rl = model.get_recurrent_layers()
             rs = {attn.layer_idx: GDN_RecurrentState() for attn in rl}
@@ -263,7 +263,7 @@ def prepare_for_recurrence(input_ids: torch.Tensor, params: dict, model) -> torc
 
     else:
         if "recurrent_states" in params:
-            raise ValueError(f"recurrent_states given without bsz and seqlens")
+            raise ValueError("recurrent_states given without bsz and seqlens")
 
 
 class GatedDeltaNet(Module):

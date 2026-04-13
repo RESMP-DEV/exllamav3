@@ -1,8 +1,9 @@
+import math
 from dataclasses import dataclass
+from enum import IntEnum
 
 import torch
-import math
-from enum import IntEnum
+
 from ..ext import exllamav3_ext as ext
 
 # Reference:
@@ -29,7 +30,7 @@ class RopeSettings:
     override_type: str | None = None
 
     def print(self):
-        print(f" -- RoPE settings")
+        print(" -- RoPE settings")
         print(f"    head_dim: {self.head_dim}")
         print(f"    rope_scaling: {self.rope_scaling}")
         print(f"    rope_theta: {self.rope_theta}")

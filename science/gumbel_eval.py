@@ -1,10 +1,12 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import torch
-from exllamav3.ext import exllamav3_ext as ext
-from exllamav3 import GumbelSampler, ArgmaxSampler
 import random
+
 import matplotlib.pyplot as plt
+import torch
+from exllamav3 import GumbelSampler
 
 torch.set_printoptions(precision = 5, sci_mode = False, linewidth = 200)
 

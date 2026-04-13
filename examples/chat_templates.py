@@ -23,7 +23,7 @@ class PromptFormat_raw(PromptFormat):
 
     def default_system_prompt(self, think):
         return (
-            f"This is a conversation between a helpful AI assistant " +
+            "This is a conversation between a helpful AI assistant " +
             (f"named {self.bot_name} " if self.bot_name != "Assistant" else "") +
             (f"and a user named {self.user_name}." if self.user_name != "User" else """and a user.""")
         )
@@ -68,7 +68,7 @@ class PromptFormat_llama3(PromptFormat):
         context = f"<|start_header_id|>system<|end_header_id|>\n\n{system_prompt}<|eot_id|>"
         for (u, a) in messages:
             context += f"<|start_header_id|>user<|end_header_id|>\n\n{u}<|eot_id|>"
-            context += f"<|start_header_id|>assistant<|end_header_id|>\n\n"
+            context += "<|start_header_id|>assistant<|end_header_id|>\n\n"
             if a is not None: context += f"{a}<|eot_id|>"
         return context
 
@@ -91,14 +91,14 @@ class PromptFormat_chatml(PromptFormat):
 
     def default_system_prompt(self, think):
         return (
-            f"You are a helpful AI assistant."
+            "You are a helpful AI assistant."
         )
 
     def format(self, system_prompt, messages, think):
         context = f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
         for (u, a) in messages:
             context += f"<|im_start|>user\n{u}<|im_end|>\n"
-            context += f"<|im_start|>assistant\n"
+            context += "<|im_start|>assistant\n"
             if a is not None: context += f"{a}<|im_end|>\n"
         return context
 
@@ -121,18 +121,18 @@ class PromptFormat_qwen35(PromptFormat):
 
     def default_system_prompt(self, think):
         return (
-            f"You are a helpful AI assistant."
+            "You are a helpful AI assistant."
         )
 
     def format(self, system_prompt, messages, think):
         context = f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
         for (u, a) in messages:
             context += f"<|im_start|>user\n{u}<|im_end|>\n"
-            context += f"<|im_start|>assistant\n"
+            context += "<|im_start|>assistant\n"
             if a is not None:
                 context += f"{a}<|im_end|>\n"
             elif not think:
-                context += f"<think>\n\n</think>\n\n"
+                context += "<think>\n\n</think>\n\n"
         return context
 
     def add_bos(self):
@@ -157,14 +157,14 @@ class PromptFormat_phi(PromptFormat):
 
     def default_system_prompt(self, think):
         return (
-            f"You are a helpful AI assistant."
+            "You are a helpful AI assistant."
         )
 
     def format(self, system_prompt, messages, think):
         context = f"<|system|>\n{system_prompt}<|end|>\n"
         for (u, a) in messages:
             context += f"<|user|>\n{u}<|end|>\n"
-            context += f"<|assistant|>\n"
+            context += "<|assistant|>\n"
             if a is not None: context += f"{a}<|end|>\n"
         return context
 
@@ -186,14 +186,14 @@ class PromptFormat_glm(PromptFormat):
 
     def default_system_prompt(self, think):
         return (
-            f"You are a helpful AI assistant."
+            "You are a helpful AI assistant."
         )
 
     def format(self, system_prompt, messages, think):
         context = f"[gMASK]<sop><|system|>\n{system_prompt}"
         for (u, a) in messages:
             context += f"<|user|>\n{u}"
-            context += f"<|assistant|>"
+            context += "<|assistant|>"
             if a is not None: context += f"{a}"
         return context
 
@@ -280,9 +280,9 @@ class PromptFormat_gemma(PromptFormat):
     def format(self, system_prompt, messages, think):
         context = ""
         for (u, a) in messages:
-            context += f"<start_of_turn>user\n"
+            context += "<start_of_turn>user\n"
             context += f"{u}<end_of_turn>\n"
-            context += f"<start_of_turn>model\n"
+            context += "<start_of_turn>model\n"
             if a is not None: context += f"{a}<end_of_turn>\n"
         return context
 
@@ -314,7 +314,7 @@ class PromptFormat_reka(PromptFormat):
                 first = False
             else:
                 context += f"human: {u} <sep> "
-            context += f"assistant:"
+            context += "assistant:"
             if a is not None: context += f" {a} <sep> "
         return context
 
@@ -489,7 +489,7 @@ class PromptFormat_smollm3(PromptFormat):
         context = f"<|im_start|>system\n{system_prompt}<|im_end|>\n"
         for (u, a) in messages:
             context += f"<|im_start|>user\n{u}<|im_end|>\n"
-            context += f"<|im_start|>assistant\n"
+            context += "<|im_start|>assistant\n"
             if a is not None: context += f"{a}<|im_end|>\n"
         return context
 
@@ -728,7 +728,7 @@ class PromptFormat_minimax(PromptFormat):
 
     def default_system_prompt(self, think):
         return (
-            f"You are a helpful assistant."
+            "You are a helpful assistant."
         )
 
     def format(self, system_prompt, messages, think):

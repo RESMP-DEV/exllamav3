@@ -1,7 +1,9 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from exllamav3 import Model, Config, Cache, Tokenizer, Generator, Job, GreedySampler
 from common import format_prompt, get_stop_conditions
+from exllamav3 import Cache, Config, Generator, GreedySampler, Job, Model, Tokenizer
 
 """
 A simple showcase of the banned strings feature of the generator, which prevents the model from sampling any of a

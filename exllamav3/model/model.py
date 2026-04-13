@@ -1,12 +1,16 @@
 from __future__ import annotations
+
+from collections.abc import Callable
 from functools import cached_property
-from typing import Callable
+
 import torch
-from .config import Config
+
 from ..util.memory import free_mem
-from .model_tp import Model_TPMixin
-from .model_ls import Model_LSMixin
 from ..util.tensor import g_tensor_cache
+from .config import Config
+from .model_ls import Model_LSMixin
+from .model_tp import Model_TPMixin
+
 
 class Model(Model_TPMixin, Model_LSMixin):
 

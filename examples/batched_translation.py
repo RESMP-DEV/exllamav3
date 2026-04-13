@@ -1,13 +1,16 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import argparse
-from transformers import AutoTokenizer
-from exllamav3.util.progress import ProgressBar
-from exllamav3.util.file import disk_lru_cache
-from exllamav3 import model_init, Generator, Job
-from datasets import load_dataset
-import torch
 import time
+
+import torch
+from datasets import load_dataset
+from exllamav3 import Generator, Job, model_init
+from exllamav3.util.file import disk_lru_cache
+from exllamav3.util.progress import ProgressBar
+from transformers import AutoTokenizer
 
 # ANSI codes
 ESC = "\u001b"
@@ -55,7 +58,7 @@ def format_request(hf_tokenizer, eos_tokens, text, max_new_tokens, idx):
 def main(args):
 
     # Load dataset as list
-    print(f" -- Loading dataset...")
+    print(" -- Loading dataset...")
     in_data = get_dataset(args.dataset_path, args.dataset_name, args.dataset_split, args.dataset_key, 125)
     avg_len = sum([len(d) for d in in_data]) / len(in_data)
     print(f" -- Loaded {len(in_data)} items, avg. item length {avg_len:.2f} chars")
@@ -68,7 +71,7 @@ def main(args):
     print(f" -- Bitrate: {bpw_layer:.2f} bpw / {bpw_head:.2f} bpw (head)")
 
     # Use HF tokenizer for prompt formatting
-    print(f" -- Loading HF tokenizer...")
+    print(" -- Loading HF tokenizer...")
     hf_tokenizer = AutoTokenizer.from_pretrained(args.model_dir)
 
     # Create jobs

@@ -1,10 +1,11 @@
-from setuptools import setup
 import importlib.util
 import os
 
+from setuptools import setup
+
 if torch := importlib.util.find_spec("torch") is not None:
-    from torch.utils import cpp_extension
     from torch import version as torch_version
+    from torch.utils import cpp_extension
 
 extension_name = "exllamav3_ext"
 precompile = "EXLLAMA_NOCOMPILE" not in os.environ

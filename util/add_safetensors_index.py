@@ -1,8 +1,12 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from exllamav3.loader.safetensors import SafetensorsCollection
 import argparse
 import json
+
+from exllamav3.loader.safetensors import SafetensorsCollection
+
 
 def main(args):
     stc = SafetensorsCollection(args.model_dir)

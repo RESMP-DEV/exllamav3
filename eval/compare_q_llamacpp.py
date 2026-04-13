@@ -1,13 +1,14 @@
 try:
     import llama_cpp
-    import gguf
     from gguf import GGUFReader
     from llama_cpp import Llama
 except:
     pass
-import torch
 from functools import lru_cache
+
+import torch
 from exllamav3.util.file import disk_lru_cache
+
 
 @lru_cache  # run once
 def init_backend():

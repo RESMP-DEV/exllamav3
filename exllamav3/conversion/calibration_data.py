@@ -1,6 +1,8 @@
-import torch
 import os
 import random
+
+import torch
+
 
 def split_art(articles, rows, columns, tokenizer):
     t_rows = []
@@ -80,7 +82,7 @@ def get_default_calibration(args, tokenizer):
         target_rows = max(1, int(weight / dist_sum * rows))
         if filename:
             path = os.path.join(data_dir, filename)
-            with open(path, "r", encoding = "utf8") as f:
+            with open(path, encoding = "utf8") as f:
                 file_text = f.read()
         else:
             file_text = None

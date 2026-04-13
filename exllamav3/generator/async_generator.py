@@ -1,7 +1,10 @@
 from __future__ import annotations
+
+import asyncio
+
 from .generator import Generator
 from .job import Job
-import asyncio
+
 
 class AsyncGenerator:
     """

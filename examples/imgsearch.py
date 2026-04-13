@@ -1,13 +1,16 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-import torch
 import argparse
+import glob
+from pathlib import Path
+
+import torch
 from exllamav3 import Model, model_init
 from exllamav3.util.progress import ProgressBar
-from PIL import Image
-import glob
-from pathlib import (Path)
 from imgsearch_gallery import gallery
+from PIL import Image
 
 """
 Small example of using a VLM to query multiple images with the same yes/no question and collect all the positive
@@ -79,7 +82,7 @@ def main(args):
                 batch_files.append(input_files[idx])
                 batch_images.append(img)
                 total_files += 1
-            except (IOError, SyntaxError):
+            except (OSError, SyntaxError):
                 # Skip non-image files and ignore other errors
                 skipped_files += 1
             idx += 1

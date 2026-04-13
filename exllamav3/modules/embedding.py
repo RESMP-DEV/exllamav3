@@ -1,12 +1,15 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
 from torch import nn
+from typing_extensions import override
+
 from ..model.config import Config
+from ..model.model_tp_alloc import TPAllocation
+from ..tokenizer.mm_embedding import FIRST_MM_EMBEDDING_INDEX
 from ..util.tensor import to2
 from . import Module
-from ..tokenizer.mm_embedding import FIRST_MM_EMBEDDING_INDEX
-from ..model.model_tp_alloc import TPAllocation
+
 
 class Embedding(Module):
 

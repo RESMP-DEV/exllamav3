@@ -1,11 +1,13 @@
+from argparse import ArgumentParser
 from types import SimpleNamespace
 
-from . import Model, Config, Cache, Tokenizer
-from .loader import SafetensorsCollection, VariantSafetensorsCollection
+import yaml
+
+from . import Cache, Config, Model, Tokenizer
 from .cache import CacheLayer_fp16, CacheLayer_quant
 from .generator.sampler import ComboSampler
-from argparse import ArgumentParser
-import yaml
+from .loader import SafetensorsCollection, VariantSafetensorsCollection
+
 
 def add_args(
     parser: ArgumentParser,
@@ -147,7 +149,7 @@ def init(
 
     # Override tensors
     if args.override:
-        with open(args.override, "r") as f:
+        with open(args.override) as f:
             comp = yaml.safe_load(f)
         sources = {s["id"]: s["model_dir"] for s in comp["sources"]}
         overrides = {o["key"]: sources[o["source"]] for o in comp["overrides"]}
@@ -234,7 +236,7 @@ def init(
 
     # Load tokenizer
     if load_tokenizer:
-        printp(not quiet, f" -- Loading tokenizer...")
+        printp(not quiet, " -- Loading tokenizer...")
         tokenizer = Tokenizer.from_config(config)
     else:
         tokenizer = None

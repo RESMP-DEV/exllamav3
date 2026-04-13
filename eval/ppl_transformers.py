@@ -1,16 +1,19 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse
-from exllamav3.util.file import disk_lru_cache, disk_lru_cache_clear
-from exllamav3.util.progress import ProgressBar
-from exllamav3.util.memory import free_mem
-from exllamav3 import Config, Tokenizer, model_init
-from transformers import AutoModelForCausalLM
-from datasets import load_dataset
+import math
+
 import torch
 import torch.nn.functional as F
-import math
+from datasets import load_dataset
+from exllamav3 import Config, Tokenizer, model_init
+from exllamav3.util.file import disk_lru_cache
+from exllamav3.util.memory import free_mem
+from exllamav3.util.progress import ProgressBar
+from transformers import AutoModelForCausalLM
 
 
 @disk_lru_cache("get_dataset_text")
@@ -88,7 +91,7 @@ def main(args):
         perplexity = math.exp(-mean_log_prob)
 
     print(f" -- Model: {args.model_dir}")
-    print(f" -- Loaded with Transformers")
+    print(" -- Loaded with Transformers")
     print(f" -- Evaluated: {eval_ids.shape[0]} rows of {eval_ids.shape[1]} tokens")
     print(f" -- Perplexity: {perplexity:.6f}")
 

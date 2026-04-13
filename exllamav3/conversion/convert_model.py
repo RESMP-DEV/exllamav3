@@ -1,23 +1,25 @@
 import argparse
-import torch
-import time
+import json
+import os
+import shutil
 import sys
+import threading
+import time
+from collections import deque
+
+import torch
+
 from .. import Config, Model, Tokenizer
+from ..loader.safetensors_alt import safe_open, save_file
 from ..modules import Linear
-from ..modules.quant import LinearFP16, LinearEXL3
-from ..util.progress import ProgressBar
-from ..util.memory import free_mem
+from ..modules.quant import LinearEXL3, LinearFP16
 from ..util import Timer, human_time
-from ..util.tensor import save_tensor_image
 from ..util.measures import cosine_error, sqnr
+from ..util.progress import ProgressBar
+from ..util.tensor import save_tensor_image
+from .allocation import create_q_strategy, print_strategy
 from .calibration_data import get_default_calibration
 from .compile import compile_model, dsize
-from .allocation import create_q_strategy, print_strategy
-from ..loader.safetensors_alt import save_file, safe_open
-import os, shutil
-import json
-import threading
-from collections import deque
 
 col_default = "\u001b[0m"
 col_red = "\u001b[31;1m"
@@ -74,7 +76,7 @@ def save_dict(filename, dict_, args):
 
 def load_dict(filename, args):
     path = os.path.join(args["work_dir"], filename)
-    with open(path, "r", encoding = "utf8") as f:
+    with open(path, encoding = "utf8") as f:
         return json.load(f)
 
 
@@ -104,7 +106,7 @@ def save_tensor(tensor, filename: str, args):
         }, path)
     else:
         save_file({
-            f"tensor": tensor
+            "tensor": tensor
         }, path)
 
 
@@ -187,9 +189,9 @@ def prepare(args) -> (dict, dict, bool, str):
 
     if args.resume:
         job_state = load_dict("ckpt/job.json", in_args)
-        print(f" -- Resuming existing job")
+        print(" -- Resuming existing job")
     else:
-        print(f" -- Creating new job")
+        print(" -- Creating new job")
         job_state = {
             "next_module_idx": 0,
             "q_strategy": None,
@@ -203,7 +205,7 @@ def prepare(args) -> (dict, dict, bool, str):
     print(f"    Working directory: {in_args['work_dir']}")
     print(f"    Calibration size: {in_args['cal_rows']} rows, {in_args['cal_cols']} columns")
     print(f"    Target bitrate: {in_args['bits']} (decoder), {in_args['head_bits']} (head)")
-    print(f"    Output scales: " + {True: "always", False: "never", None: "auto"}[in_args["apply_out_scales"]])
+    print("    Output scales: " + {True: "always", False: "never", None: "auto"}[in_args["apply_out_scales"]])
     print(f"    Codebook: {in_args['codebook']}")
 
     if warn_experimental:
@@ -217,13 +219,13 @@ def prepare(args) -> (dict, dict, bool, str):
 
 def get_base_model(args):
     config = Config.from_directory(args["in_dir"])
-    print(f" -- Loaded model config")
+    print(" -- Loaded model config")
     print(f"    Architecture: {config.architecture}")
     model = Model.from_config(config)
-    print(f" -- Created model instance:")
+    print(" -- Created model instance:")
     print(model.get_layout_tree(4))
     tokenizer = Tokenizer.from_config(config)
-    print(f" -- Loaded tokenizer")
+    print(" -- Loaded tokenizer")
     print(f"    Vocab size: {tokenizer.actual_vocab_size}")
     if hasattr(config, "rope_settings"):
         config.rope_settings.print()
@@ -233,7 +235,7 @@ def get_base_model(args):
 def prepare_state(args, job_state, config, model, tokenizer):
     idx = job_state["next_module_idx"]
     if idx == 0:
-        print(f" -- Preparing input state")
+        print(" -- Preparing input state")
         state = get_default_calibration(args, tokenizer)
     else:
         if idx < len(model.modules):
@@ -501,7 +503,7 @@ def main(args, job_state):
                             time.sleep(0.1)
                 except KeyboardInterrupt as e:
                     # TODO: This is too hacky
-                    from signal import pthread_kill, SIGTSTP, SIGKILL
+                    from signal import SIGKILL, SIGTSTP, pthread_kill
                     for t in threads:
                         pthread_kill(t.ident, SIGTSTP)
                         pthread_kill(t.ident, SIGKILL)
@@ -619,7 +621,7 @@ def main(args, job_state):
         module_time = time.time() - start_module_time
         print(
             f" -- Quantized: {module.key:{config.stc.max_key_len() + 8}}" +
-            (f"  bpw: {final_bpw:5.2f}" if final_bpw else f"  no_weights") +
+            (f"  bpw: {final_bpw:5.2f}" if final_bpw else "  no_weights") +
             (f"  rfn: {error:.6f}" if module.num_slices == 1 else "        rfn: N/A     ") +
             f"  cos: {cos_error:.6f}"
             f"  sqnr: {sqnr_:.6f}"
@@ -653,7 +655,7 @@ def main(args, job_state):
         if can_resume_quant and \
             time.time() > last_checkpoint_time + args["checkpoint_interval"] and \
             (args.get("last_checkpoint_index", -1) < 0 or idx <= args["last_checkpoint_index"]):
-            print(f" -- Saving checkpoint")
+            print(" -- Saving checkpoint")
             ckpt_dir = os.path.join(args["work_dir"], "ckpt")
             ckpt_dir_old = os.path.join(args["work_dir"], "ckpt_old")
             ckpt_dir_new = os.path.join(args["work_dir"], "ckpt_new")

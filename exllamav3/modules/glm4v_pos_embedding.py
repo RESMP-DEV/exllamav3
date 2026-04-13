@@ -1,10 +1,13 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
 import torch.nn.functional as F
+from typing_extensions import override
+
 from ..model.config import Config
-from . import Module
 from ..util.tensor import get_for_device, to2
+from . import Module
+
 
 class Glm4VPosEmbedding(Module):
 

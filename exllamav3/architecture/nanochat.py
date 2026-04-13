@@ -1,22 +1,22 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from typing_extensions import override
+
 from ..model.config import Config, no_default
 from ..model.model import Model
-from ..util.rope import RopeStyle
 from ..modules import (
-    RMSNorm,
-    Embedding,
-    TransformerBlock,
-    Attention,
     MLP,
+    Attention,
+    Embedding,
     Linear,
+    RMSNorm,
+    TransformerBlock,
     ValueEmbeddings,
 )
 from ..modules.attn import prepare_for_attn
-from ..util.tensor import to2
+from ..util.rope import RopeStyle
+
 
 class NanoChatConfig(Config):
     arch_string = "NanoChatForCausalLM"

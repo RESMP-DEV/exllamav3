@@ -1,7 +1,11 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from exllamav3.conversion.quant_config import create_quantization_config_json
 import argparse
+
+from exllamav3.conversion.quant_config import create_quantization_config_json
+
 
 def main(args):
     filename = os.path.join(args.model_dir, "quantization_config.json")

@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+
 def save_session(
     filename: str,
     system_prompt: str,

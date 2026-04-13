@@ -1,12 +1,14 @@
+import json
 import os
 import shutil
-import json
+
 from ..loader.safetensors import SafetensorsCollection
-from ..version import __version__
 from ..loader.safetensors_alt import save_file
-from ..util.memory import free_mem
 from ..modules import Module
-from .quant_config import update_config, create_quantization_config_json
+from ..util.memory import free_mem
+from ..version import __version__
+from .quant_config import create_quantization_config_json, update_config
+
 
 def tsize(t):
     return t.nelement() * t.element_size()
@@ -34,7 +36,7 @@ def compile_model(args, model, config, tokenizer):
     else:
         print(f" -- Writing into {out_dir}")
         if len(os.listdir(out_dir)) != 0:
-            print(f" !! Warning, output directory is not empty")
+            print(" !! Warning, output directory is not empty")
 
     # Allocate shards
     total_size = 0
@@ -121,7 +123,7 @@ def compile_model(args, model, config, tokenizer):
         target_file_path = os.path.join(out_dir, f)
         shutil.copy(source_file_path, target_file_path)
     if ignored_files:
-        print(f" !! Warning, the following file(s) will not be included in output model:")
+        print(" !! Warning, the following file(s) will not be included in output model:")
         for f in ignored_files[:10]:
             print(f"     - {f}")
         if len(ignored_files) > 10:
@@ -129,7 +131,7 @@ def compile_model(args, model, config, tokenizer):
 
     # Write new model.safetensors.index.json maybe
     if num_files > 1:
-        print(f" -- Writing model.safetensors.index.json")
+        print(" -- Writing model.safetensors.index.json")
         safetensors_index = {
             "metadata": {
                 "total_size": total_size,
@@ -140,8 +142,8 @@ def compile_model(args, model, config, tokenizer):
             f.write(json.dumps(safetensors_index, indent = 4))
 
     # Update and write config.json
-    print(f" -- Writing config.json")
-    with open(os.path.join(in_dir, "config.json"), "r") as f:
+    print(" -- Writing config.json")
+    with open(os.path.join(in_dir, "config.json")) as f:
         config_dict = json.load(f)
 
     qcfg = {
@@ -189,7 +191,7 @@ def compile_model(args, model, config, tokenizer):
         f.write(json.dumps(config_dict, indent = 4))
 
     # Add extra metadata to quant_config
-    print(f" -- Creating quantization_config.json")
+    print(" -- Creating quantization_config.json")
     create_quantization_config_json(out_dir)
 
     print(f" -- Finished compiling model to {out_dir}")

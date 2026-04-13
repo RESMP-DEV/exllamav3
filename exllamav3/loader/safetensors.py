@@ -1,15 +1,18 @@
 from __future__ import annotations
 
-import re
-from dataclasses import dataclass
-import torch
-import os, glob
-import numpy as np
+import glob
 import json
-from ..util import Timer, cuda_sync_active
-from ..ext import exllamav3_ext as ext
-from functools import cached_property
+import os
+import re
 import time
+from dataclasses import dataclass
+from functools import cached_property
+
+import numpy as np
+import torch
+
+from ..ext import exllamav3_ext as ext
+from ..util import Timer, cuda_sync_active
 
 MAX_DEFERRED_LOAD_CHUNK = 2*1024**2
 
@@ -178,7 +181,7 @@ class SafetensorsCollection:
         optional: bool = False
     ):
         assert self.new_tensors is None
-        if not key in self.tensor_file_map:
+        if key not in self.tensor_file_map:
             if not optional:
                 raise ValueError(f"Required tensor {key} not found in any *.safetensors file in {self.directory}")
             else:
@@ -291,7 +294,7 @@ class SafetensorsCollection:
                 tensor = tensor.T.contiguous()
             return tensor
 
-        if not key in self.tensor_file_map:
+        if key not in self.tensor_file_map:
             if not optional:
                 raise ValueError(f"Required tensor {key} not found in any *.safetensors file in {self.directory}")
             else:
@@ -467,11 +470,11 @@ class SafetensorsCollection:
                 filename = load["filename"]
                 cuda = load["cuda"]
                 if cuda:
-                    if not filename in cuda_loads:
+                    if filename not in cuda_loads:
                         cuda_loads[filename] = []
                     cuda_loads[filename].append(load)
                 else:
-                    if not filename in cpu_loads:
+                    if filename not in cpu_loads:
                         cpu_loads[filename] = []
                     cpu_loads[filename].append(load)
 

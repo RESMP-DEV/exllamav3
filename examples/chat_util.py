@@ -1,9 +1,12 @@
 from __future__ import annotations
-import re
-import pyperclip
+
 import json
 import random
+import re
+
+import pyperclip
 from exllamav3.util.file import disk_lru_cache
+
 
 def copy_last_codeblock(text: str, num) -> str | None:
     pattern = re.compile(r"```[^\n`]*\n(.*?)```", re.DOTALL)

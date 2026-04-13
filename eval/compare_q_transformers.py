@@ -1,10 +1,10 @@
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 try:
+    from gptqmodel.nn_modules.qlinear.exllamav2 import ExllamaV2QuantLinear
     from gptqmodel.nn_modules.qlinear.marlin import MarlinQuantLinear
     from gptqmodel.nn_modules.qlinear.tritonv2 import TritonV2QuantLinear
-    from gptqmodel.nn_modules.qlinear.exllamav2 import ExllamaV2QuantLinear
 except ModuleNotFoundError:
     MarlinQuantLinear = None
     TritonV2QuantLinear = None

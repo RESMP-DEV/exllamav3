@@ -1,9 +1,13 @@
 from __future__ import annotations
+
+import json
+import os
+
 from ..model.config import Config, no_default
 from ..util.rope import RopeStyle
 from .glm4_moe import Glm4MoeModel
-import os, json
-from .glm4v import read_glm4v_vision_config, read_glm4v_pp_config, Glm4VVisionModel
+from .glm4v import Glm4VVisionModel, read_glm4v_pp_config, read_glm4v_vision_config
+
 
 class Glm4VMoeConfig(Config):
     arch_string = "Glm4vMoeForConditionalGeneration"

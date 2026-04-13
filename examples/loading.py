@@ -1,7 +1,9 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from exllamav3 import Config, Model, Cache, Tokenizer
+from exllamav3 import Cache, Config, Model, Tokenizer
 
 # Define model by loading the config from the model directory
 config = Config.from_directory("/mnt/str/models/llama3.1-8b-instruct/exl3/4.0bpw/")

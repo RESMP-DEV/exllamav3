@@ -1,30 +1,34 @@
 from __future__ import annotations
-from typing_extensions import override
+
+import json
+import os
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
+
 import numpy as np
 import torch
 import torch.nn.functional as F
+from PIL import Image
+from typing_extensions import override
+
 from ..model.config import Config
 from ..model.model import Model
-from ..util.rope import RopeStyle, position_embedding_grid_2d, RopeSettings
-from ..util.vision import convert_to_rgb, normalize_image, smart_resize
-from ..util.file import read_dict,  no_default
 from ..modules import (
-    Module,
-    TransformerBlock,
-    Attention,
-    Linear,
-    Conv,
     MLP,
+    Attention,
+    Conv,
     LayerNorm,
-    Qwen3VLPosEmbedding
+    Linear,
+    Module,
+    Qwen3VLPosEmbedding,
+    TransformerBlock,
 )
+from ..tokenizer import MMEmbedding, Tokenizer
+from ..util.file import no_default, read_dict
+from ..util.rope import RopeSettings, RopeStyle, position_embedding_grid_2d
+from ..util.vision import convert_to_rgb, normalize_image, smart_resize
 from .qwen3 import Qwen3Model
-from ..tokenizer import Tokenizer, MMEmbedding
-from types import SimpleNamespace
-from PIL import Image
-import os, json
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .qwen3_vl_moe import Qwen3VLMoeConfig
 

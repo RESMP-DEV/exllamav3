@@ -1,13 +1,23 @@
 from __future__ import annotations
-from typing_extensions import override
-import torch
-from ..model.config import Config, no_default
-from ..model.model import Model
-from ..util.rope import RopeStyle, RoPE
-from ..modules import RMSNorm, Embedding, TransformerBlock, Attention, GatedMLP, Linear, DeepstackEmbed
-from ..modules.attn import prepare_for_attn
 
 from typing import TYPE_CHECKING
+
+import torch
+from typing_extensions import override
+
+from ..model.config import Config, no_default
+from ..model.model import Model
+from ..modules import (
+    Attention,
+    Embedding,
+    GatedMLP,
+    Linear,
+    RMSNorm,
+    TransformerBlock,
+)
+from ..modules.attn import prepare_for_attn
+from ..util.rope import RopeStyle
+
 if TYPE_CHECKING:
     from .hcxvisionv2 import HCXVisionV2Config
 
@@ -178,9 +188,9 @@ class HyperClovaxModel(Model):
     def default_chat_prompt(self, prompt: str, system_prompt: str = None) -> str:
         p = ""
         if system_prompt:
-            p += f"<|im_start|>system\n"
+            p += "<|im_start|>system\n"
             p += f"{system_prompt}<|im_end|>\n"
-        p += f"<|im_start|>user\n"
+        p += "<|im_start|>user\n"
         p += f"{prompt}<|im_end|>\n"
-        p += f"<|im_start|>assistant\n"
+        p += "<|im_start|>assistant\n"
         return p

@@ -1,5 +1,5 @@
-from .arcee import ArceeModel
 from .apertus import ApertusModel
+from .arcee import ArceeModel
 from .cohere import CohereModel
 from .cohere2 import Cohere2Model
 from .decilm import DeciLMModel

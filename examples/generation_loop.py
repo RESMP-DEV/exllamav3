@@ -1,10 +1,12 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from exllamav3 import Config, Model, Cache, Tokenizer, GreedySampler
-from exllamav3.util import Timer
-from common import format_prompt, get_stop_conditions
 import torch
+from common import format_prompt, get_stop_conditions
+from exllamav3 import Cache, Config, GreedySampler, Model, Tokenizer
+from exllamav3.util import Timer
 
 """
 This script demonstrates a minimal, cached generation pipeline, starting with tokenization of a prompt, prefill

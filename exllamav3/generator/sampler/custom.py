@@ -1,15 +1,16 @@
-from .sampler import Sampler
-import torch
-from typing_extensions import override
-from ...tokenizer import Tokenizer
-from ...ext import exllamav3_ext as ext
-from ...util import next_power_of_2
-from ...util.tensor import buffered_arange
 import random
 from dataclasses import dataclass
 from enum import Enum
-from ...util import profile_opt
+
+import torch
 import torch.nn.functional as F
+from typing_extensions import override
+
+from ...ext import exllamav3_ext as ext
+from ...tokenizer import Tokenizer
+from ...util.tensor import buffered_arange
+from .sampler import Sampler
+
 
 class SS(Enum):
     INIT = 0  # only state.in_logits is valid

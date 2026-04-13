@@ -1,10 +1,13 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse
-from exllamav3.util.progress import ProgressBar
-from exllamav3 import Config, Model, Cache, Tokenizer, model_init, Generator, Job, GreedySampler
+
 import torch
+from exllamav3 import Generator, GreedySampler, Job, model_init
+from exllamav3.util.progress import ProgressBar
 
 # ANSI codes
 ESC = "\u001b"
@@ -28,21 +31,21 @@ def main(args):
 
     # Get
     texts_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "eval_texts")
-    with open(os.path.join(texts_dir, "illustrious_client.txt"), "r") as file:
+    with open(os.path.join(texts_dir, "illustrious_client.txt")) as file:
         text_ic_orig = file.read()
-    with open(os.path.join(texts_dir, "illustrious_client_c1.txt"), "r") as file:
+    with open(os.path.join(texts_dir, "illustrious_client_c1.txt")) as file:
         text_ic_french = file.read()
-    with open(os.path.join(texts_dir, "illustrious_client_c2.txt"), "r") as file:
+    with open(os.path.join(texts_dir, "illustrious_client_c2.txt")) as file:
         text_ic_zoomer = file.read()
-    with open(os.path.join(texts_dir, "illustrious_client_sum.txt"), "r") as file:
+    with open(os.path.join(texts_dir, "illustrious_client_sum.txt")) as file:
         text_ic_sum = file.read()
-    with open(os.path.join(texts_dir, "variable_man_mod.txt"), "r") as file:
+    with open(os.path.join(texts_dir, "variable_man_mod.txt")) as file:
         text_vm_mod = file.read()
-    with open(os.path.join(texts_dir, "variable_man_mod_c1.txt"), "r") as file:
+    with open(os.path.join(texts_dir, "variable_man_mod_c1.txt")) as file:
         text_vm_pony = file.read()
-    with open(os.path.join(texts_dir, "variable_man_sum.txt"), "r") as file:
+    with open(os.path.join(texts_dir, "variable_man_sum.txt")) as file:
         text_vm_sum = file.read()
-    with open(os.path.join(texts_dir, "variable_man_char.txt"), "r") as file:
+    with open(os.path.join(texts_dir, "variable_man_char.txt")) as file:
         text_vm_char = file.read()
 
     # Template

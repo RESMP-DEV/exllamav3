@@ -1,11 +1,15 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from exllamav3 import Config, Model, Cache, Tokenizer, Generator, Job, Filter, FormatronFilter
-from formatron.schemas.pydantic import ClassSchema
-from formatron.formatter import FormatterBuilder
-from pydantic import conlist
-from typing import Literal, Optional
+from typing import Literal
+
+from exllamav3 import Cache, Config, Filter, FormatronFilter, Generator, Job, Model, Tokenizer
 from formatron.extractor import NonterminalExtractor
+from formatron.formatter import FormatterBuilder
+from formatron.schemas.pydantic import ClassSchema
+from pydantic import conlist
+
 
 def get_superhero_filter(tokenizer) -> list[Filter]:
 
@@ -41,10 +45,10 @@ def get_superhero_filter(tokenizer) -> list[Filter]:
 def get_arithmetic_filter(tokenizer) -> list[Filter]:
 
     class ArithmeticExpressionExtractor(NonterminalExtractor):
-        def __init__(self, nonterminal: str, capture_name: Optional[str] = None):
+        def __init__(self, nonterminal: str, capture_name: str | None = None):
             super().__init__(nonterminal, capture_name)
 
-        def extract(self, input_str: str) -> Optional[tuple[str, any]]:
+        def extract(self, input_str: str) -> tuple[str, any] | None:
             i = 0
             left_bracket = 0
             while i < len(input_str):

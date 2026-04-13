@@ -15,7 +15,8 @@ KWSTYLES = {"borderwidth": 0, "highlightthickness": 0, "bg": BACKGROUND}
 def gallery(image_paths: list[str], title: str):
     import tkinter as tk
     from tkinter import Toplevel
-    from PIL import Image, ImageTk, ImageOps
+
+    from PIL import Image, ImageOps, ImageTk
 
     def make_thumbnail(path):
         img = Image.open(path)

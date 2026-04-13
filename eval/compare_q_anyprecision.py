@@ -1,4 +1,5 @@
 import torch
+
 try:
     from any_precision.modules.AnyPrecisionForCausalLM import AnyPrecisionForCausalLM
     from any_precision.modules.AnyPrecisionLinear import AnyPrecisionLinear

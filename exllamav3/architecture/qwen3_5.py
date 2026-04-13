@@ -1,26 +1,28 @@
 from __future__ import annotations
-from typing_extensions import override
-import torch
-import os
+
 import json
+import os
+
+import torch
+from typing_extensions import override
 
 from ..model.config import Config, no_default
 from ..model.model import Model
-from ..util.rope import RopeStyle, RoPE
 from ..modules import (
-    RMSNorm,
-    Embedding,
-    TransformerBlock,
     Attention,
     BlockSparseMLP,
-    Linear,
+    DeepstackEmbed,
+    Embedding,
     GatedDeltaNet,
     GatedMLP,
-    DeepstackEmbed
+    Linear,
+    RMSNorm,
+    TransformerBlock,
 )
 from ..modules.attn import prepare_for_attn
 from ..modules.gated_delta_net import prepare_for_recurrence
-from .qwen3_vl import read_qwen3_vl_vision_config, read_qwen3_vl_pp_config, Qwen3VLVisionModel
+from ..util.rope import RoPE, RopeStyle
+from .qwen3_vl import Qwen3VLVisionModel, read_qwen3_vl_pp_config, read_qwen3_vl_vision_config
 
 
 def read_qwen3_5_layer_types(config: Config, text_config_path: str, num_layers: int, full_attention_interval: int) -> list[str]:
@@ -479,11 +481,11 @@ class Qwen3_5BaseModel(Model):
     def default_chat_prompt(self, prompt: str, system_prompt: str = None) -> str:
         p = ""
         if system_prompt:
-            p += f"<|im_start|>system\n"
+            p += "<|im_start|>system\n"
             p += f"{system_prompt}<|im_end|>\n"
-        p += f"<|im_start|>user\n"
+        p += "<|im_start|>user\n"
         p += f"{prompt}<|im_end|>\n"
-        p += f"<|im_start|>assistant\n"
+        p += "<|im_start|>assistant\n"
         return p
 
 

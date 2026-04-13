@@ -1,5 +1,7 @@
-from ...tokenizer import Tokenizer
 import torch
+
+from ...tokenizer import Tokenizer
+
 
 class Filter:
 

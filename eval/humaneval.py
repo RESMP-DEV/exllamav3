@@ -1,11 +1,16 @@
 from __future__ import annotations
-import os, sys
+
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from exllamav3 import model_init, Generator, Job, ComboSampler
-from exllamav3.util.progress import ProgressBar
-import argparse, subprocess
-from human_eval.data import write_jsonl, read_problems
+import argparse
+import subprocess
 from pathlib import Path
+
+from exllamav3 import ComboSampler, Generator, Job, model_init
+from exllamav3.util.progress import ProgressBar
+from human_eval.data import read_problems, write_jsonl
 
 # Prompt formats
 prompt_formats = {
@@ -98,7 +103,7 @@ def main(args):
     # Validate args
     directory = os.path.dirname(args.output)
     if os.path.exists(args.output):
-        print(f" !! Warning: Output file exists and will be overwritten.")
+        print(" !! Warning: Output file exists and will be overwritten.")
 
     if args.prompt_format is None:
         prompt_format, prefix = "{{problem}}", "    "

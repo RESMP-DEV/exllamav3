@@ -1,6 +1,9 @@
 from abc import abstractmethod
+
 import torch
+
 from ...tokenizer import Tokenizer
+
 
 class Sampler:
     def __init__(self):

@@ -1,18 +1,19 @@
 from __future__ import annotations
+
 import multiprocessing
-from multiprocessing import Process, Pipe
-from ..util import find_free_port
-from .model_tp_alloc import TPAllocator
 import os
-from typing import Callable
+import uuid
+from collections.abc import Callable
+from multiprocessing import Pipe, Process
+
+from ..tokenizer.mm_embedding import send_embeddings
+from ..util import find_free_port, global_t0, log_tp
 from ..util.memory import touch_device_measure_vram
+from ..util.misc import Cleanupper
 from ..util.progress import ProgressBar
 from .config import Config
-from ..util.misc import Cleanupper
+from .model_tp_alloc import TPAllocator
 from .model_tp_fn import *
-import uuid
-from ..util import log_tp, global_t0
-from ..tokenizer.mm_embedding import send_embeddings
 
 cleanupper = Cleanupper()
 
@@ -288,7 +289,7 @@ class Model_TPMixin:
         )
 
         # Begin loading modules
-        with (ProgressBar(f"Loading (TP)" if progressbar else None, len(modules)) as progress):
+        with (ProgressBar("Loading (TP)" if progressbar else None, len(modules)) as progress):
             for idx, module in enumerate(modules):
                 last_module = module
 

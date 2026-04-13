@@ -1,14 +1,16 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import random
+
 import pytest
 import torch
-from exllamav3.ext import exllamav3_ext as ext
+import torch.testing
 from exllamav3 import (
     TopKSampler,
     TopPSampler,
 )
-import torch.testing
-import random
 from exllamav3.generator.sampler.custom import *
 
 torch.set_printoptions(precision = 5, sci_mode = False, linewidth = 150)

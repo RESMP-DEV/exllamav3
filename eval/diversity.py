@@ -1,16 +1,18 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse
+import json
+import re
+from collections import Counter
+
+import torch
+from exllamav3 import FormatronFilter, Generator, GreedySampler, Job, model_init
 from exllamav3.util.progress import ProgressBar
-from exllamav3 import model_init, Generator, Job, FormatronFilter, GreedySampler
 from formatron.formatter import FormatterBuilder
 from formatron.schemas.dict_inference import infer_mapping
-import torch
-import json
-from collections import Counter
-import math
-import re
 
 """
 Sampling diversity test, highly scientific.

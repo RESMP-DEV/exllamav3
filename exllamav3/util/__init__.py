@@ -1,2 +1,2 @@
-from .misc import *
 from .debug import *
+from .misc import *

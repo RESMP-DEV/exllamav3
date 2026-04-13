@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import torch
 
 FIRST_MM_EMBEDDING_INDEX = 1000000000

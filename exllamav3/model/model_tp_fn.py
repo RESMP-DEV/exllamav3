@@ -1,11 +1,14 @@
-import torch
 import traceback
-from .model_tp_shared import SMProducer, SMConsumer
-from ..ext import exllamav3_ext as ext
 from functools import lru_cache
-from .model_tp_backend import TPBackendNCCL, TPBackendNative
+
+import torch
+
+from ..ext import exllamav3_ext as ext
 from ..tokenizer.mm_embedding import recv_embeddings
 from ..util import log_tp, set_t0
+from .model_tp_backend import TPBackendNative, TPBackendNCCL
+from .model_tp_shared import SMConsumer, SMProducer
+
 
 def init_pg(device: int, active_devices: list[int], output_device: int, backend_args: dict, master: bool = False):
     rank = active_devices.index(device) if device >= 0 else -1
@@ -61,7 +64,7 @@ def mp_model_worker(
     dbg_t0_: float
 ):
     set_t0("TP", dbg_t0_)
-    log_tp(device, f"Child process launched")
+    log_tp(device, "Child process launched")
 
     with torch.inference_mode():
         local_context = init_pg(device, active_devices, output_device, backend_args)
@@ -71,7 +74,7 @@ def mp_model_worker(
         while True:
             msg = conn.recv()
             if msg == "quit":
-                log_tp(device, f"Child worker exiting")
+                log_tp(device, "Child worker exiting")
                 torch.cuda.synchronize()
                 local_context["inf_consumer"].close()
                 local_context["backend"].close()
@@ -288,7 +291,7 @@ class PseudoParentConn:
 
     def send(self, msg):
         if msg == "quit":
-            log_tp(self.device, f"Pseudoprocess worker quit message")
+            log_tp(self.device, "Pseudoprocess worker quit message")
         else:
             fn, args = msg
             self.result = fn(self.local_context, *args)
@@ -303,7 +306,7 @@ class PseudoParentConn:
     def close(self, *args, **kwargs):
         self.local_context["inf_consumer"].close()
         self.local_context = {}
-        log_tp(self.device, f"Pseudoprocess closed")
+        log_tp(self.device, "Pseudoprocess closed")
 
 
     def quit(self):

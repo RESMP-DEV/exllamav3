@@ -1,7 +1,10 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from exllamav3 import Config, Model, Cache, Tokenizer, Generator, Job, ArgmaxSampler, CacheLayer_quant
 import random
+
+from exllamav3 import ArgmaxSampler, Cache, Config, Generator, Job, Model, Tokenizer
 
 """
 This script creates a generator and runs varying queue depths of completion requests forever, to verify that

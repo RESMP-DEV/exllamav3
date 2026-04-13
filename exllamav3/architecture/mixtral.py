@@ -1,11 +1,14 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
+from typing_extensions import override
+
 from ..model.config import Config, no_default
 from ..model.model import Model
-from ..util.rope import RopeStyle
-from ..modules import RMSNorm, Embedding, TransformerBlock, Attention, BlockSparseMLP, Linear
+from ..modules import Attention, BlockSparseMLP, Embedding, Linear, RMSNorm, TransformerBlock
 from ..modules.attn import prepare_for_attn
+from ..util.rope import RopeStyle
+
 
 class MixtralConfig(Config):
     arch_string = "MixtralForCausalLM"

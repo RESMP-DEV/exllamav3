@@ -1,6 +1,7 @@
 import ctypes
+import glob
+import os
 from functools import lru_cache
-import os, glob
 
 CUDA_SUCCESS = 0
 CUDA_ERROR_HOST_MEMORY_ALREADY_REGISTERED = 34

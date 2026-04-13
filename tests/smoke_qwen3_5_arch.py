@@ -14,8 +14,8 @@ Optional:
 
 import argparse
 import sys
-import torch
 
+import torch
 from exllamav3 import Config, Model
 
 

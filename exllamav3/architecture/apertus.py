@@ -1,10 +1,12 @@
+import torch
 from typing_extensions import override
+
 from ..model.config import Config, no_default
 from ..model.model import Model
-import torch
-from ..util.rope import RopeStyle
-from ..modules import RMSNorm, Embedding, TransformerBlock, Attention, MLP, Linear
+from ..modules import MLP, Attention, Embedding, Linear, RMSNorm, TransformerBlock
 from ..modules.attn import prepare_for_attn
+from ..util.rope import RopeStyle
+
 
 class ApertusConfig(Config):
     arch_string = "ApertusForCausalLM"
@@ -165,5 +167,5 @@ class ApertusModel(Model):
         if system_prompt:
             p += f"<|system_start|>{system_prompt}<|system_end|>"
         p += f"<|user_start|>{prompt}<|user_end|>"
-        p += f"<|assistant_start|>"
+        p += "<|assistant_start|>"
         return p

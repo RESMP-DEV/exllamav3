@@ -1,6 +1,7 @@
 import torch
 import torch.nn.functional as F
 
+
 def sqnr(a: torch.Tensor, b: torch.Tensor, eps: float = 1e-8):
     a_flat = a.view(a.shape[0], -1)
     b_flat = b.view(b.shape[0], -1)

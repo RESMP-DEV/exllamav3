@@ -1,8 +1,11 @@
 from __future__ import annotations
-import torch
-from torch.utils.cpp_extension import load
+
 import os
 import sys
+
+import torch
+from torch.utils.cpp_extension import load
+
 from .util.arch_list import maybe_set_arch_list_env
 
 extension_name = "exllamav3_ext"

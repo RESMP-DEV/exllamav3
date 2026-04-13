@@ -1,10 +1,13 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import argparse
+
+import yaml
 from exllamav3 import Config, Model
 from exllamav3.conversion.compile import compile_model
-import argparse
 from exllamav3.loader.safetensors import SafetensorsCollection, VariantSafetensorsCollection
-import yaml
 
 
 def tsize(t):
@@ -28,7 +31,7 @@ def main(args):
 
     # Override tensors
     if args.override:
-        with open(args.override, "r") as f:
+        with open(args.override) as f:
             comp = yaml.safe_load(f)
         sources = {s["id"]: s["model_dir"] for s in comp["sources"]}
         overrides = {o["key"]: sources[o["source"]] for o in comp["overrides"]}

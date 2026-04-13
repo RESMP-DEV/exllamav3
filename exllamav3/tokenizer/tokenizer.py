@@ -1,13 +1,18 @@
 from __future__ import annotations
+
+import os
+import re
+from functools import cached_property, lru_cache
+from typing import TYPE_CHECKING
+
 import torch
-import os, re
-from tokenizers import Tokenizer as HFTokenizer, models
+from tokenizers import Tokenizer as HFTokenizer
+from tokenizers import models
+
+from ..model.config import Config
 from ..util import synchronized
 from ..util.file import maybe_read_json
-from ..model.config import Config
-from functools import lru_cache, cached_property
-from typing import TYPE_CHECKING
-from ..util import profile_opt
+
 if TYPE_CHECKING:
     from . import MMEmbedding
 

@@ -1,9 +1,12 @@
 from __future__ import annotations
-from typing_extensions import override
-from . import Module
-from ..model.config import Config
+
 import torch
+from typing_extensions import override
+
+from ..model.config import Config
 from ..model.model_tp_alloc import TPAllocation
+from . import Module
+
 
 class DeepstackEmbed(Module):
     def __init__(

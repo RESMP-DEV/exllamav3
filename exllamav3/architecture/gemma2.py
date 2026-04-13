@@ -1,11 +1,14 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
+from typing_extensions import override
+
 from ..model.config import Config, no_default
 from ..model.model import Model
-from ..util.rope import RopeStyle
-from ..modules import RMSNorm, Embedding, TransformerBlock, Attention, GatedMLP, Linear
+from ..modules import Attention, Embedding, GatedMLP, Linear, RMSNorm, TransformerBlock
 from ..modules.attn import prepare_for_attn
+from ..util.rope import RopeStyle
+
 
 class Gemma2Config(Config):
     arch_string = "Gemma2ForCausalLM"
@@ -175,5 +178,5 @@ class Gemma2Model(Model):
         if system_prompt:
             p += "{system_prompt}\n\n"
         p += f"{prompt}\n"
-        p += f"<start_of_turn>model\n"
+        p += "<start_of_turn>model\n"
         return p

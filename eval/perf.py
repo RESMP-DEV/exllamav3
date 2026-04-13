@@ -1,11 +1,14 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from exllamav3.util.progress import ProgressBar
-from exllamav3.util.misc import Timer, cuda_sync_active
-from exllamav3 import model_init
-import torch
 import argparse
 from functools import lru_cache
+
+import torch
+from exllamav3 import model_init
+from exllamav3.util.misc import Timer, cuda_sync_active
+from exllamav3.util.progress import ProgressBar
 
 # ANSI codes
 ESC = "\u001b"

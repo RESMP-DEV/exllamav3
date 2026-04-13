@@ -1,11 +1,13 @@
+import time
+from multiprocessing import shared_memory
+
+import numpy as np
 import torch
 import torch.distributed as dist
-import time
-import numpy as np
-from .model_tp_cuda import cuda_host_register, cuda_host_unregister, CUDA_HOST_REGISTER_PORTABLE
+
 from ..ext import exllamav3_ext as ext
-from multiprocessing import shared_memory
 from ..util import log_tp
+from .model_tp_cuda import CUDA_HOST_REGISTER_PORTABLE, cuda_host_register, cuda_host_unregister
 
 GLOBALS_SIZE = 128*1024
 SHBUF_SIZE = 16 * 1024 ** 2
@@ -39,7 +41,7 @@ class TPBackendNCCL:
     ):
         self.device = device
         if device < 0:
-            log_tp(device, f"NCCL init: skip CPU process")
+            log_tp(device, "NCCL init: skip CPU process")
             return
 
         self.active_devices = active_devices
@@ -80,7 +82,7 @@ class TPBackendNCCL:
 
     def close(self):
         if self.device < 0:
-            log_tp(self.device, f"NCCL close: skip CPU process")
+            log_tp(self.device, "NCCL close: skip CPU process")
             return
 
         dist.barrier()
@@ -182,7 +184,7 @@ class TPBackendNative:
         size_s = SHBUF_SIZE_S
 
         if master:
-            log_tp(device, f"Creating SHMs")
+            log_tp(device, "Creating SHMs")
             self.shm_g = shared_memory.SharedMemory(create = True, size = size_g, name = self.shm_g_name)
             log_tp(device, f"Created SHM: {self.shm_g_name}, {size_g} bytes")
             self.shm_b = shared_memory.SharedMemory(create = True, size = size_b, name = self.shm_b_name)
@@ -205,7 +207,7 @@ class TPBackendNative:
             self.shm_r = None
             self.shm_s = None
             deadline = time.time() + 15
-            log_tp(device, f"Opening SHMs")
+            log_tp(device, "Opening SHMs")
             first_fnf = True
             while True:
                 try:
@@ -224,10 +226,10 @@ class TPBackendNative:
                     break
                 except FileNotFoundError:
                     if first_fnf:
-                        log_tp(device, f"Waiting for SHM to appear")
+                        log_tp(device, "Waiting for SHM to appear")
                         first_fnf = False
                     if time.time() > deadline:
-                        log_tp(device, f"Timeout opening SHM")
+                        log_tp(device, "Timeout opening SHM")
                         raise TimeoutError("Timeout waiting for master process to create SHM")
                     time.sleep(0.05)
 
@@ -255,30 +257,30 @@ class TPBackendNative:
         self.ptr_r = self.tensor_r.data_ptr()
         self.ptr_s = self.tensor_s.data_ptr()
         if not self.cpu:
-            log_tp(device, f"Host register G")
+            log_tp(device, "Host register G")
             cuda_host_register(self.ptr_g, self.tensor_g.numel(), flags = CUDA_HOST_REGISTER_PORTABLE)
-            log_tp(device, f"Host register B")
+            log_tp(device, "Host register B")
             cuda_host_register(self.ptr_b, self.tensor_b.numel(), flags = CUDA_HOST_REGISTER_PORTABLE)
-            log_tp(device, f"Host register R")
+            log_tp(device, "Host register R")
             cuda_host_register(self.ptr_r, self.tensor_r.numel(), flags = CUDA_HOST_REGISTER_PORTABLE)
-            log_tp(device, f"Host register S")
+            log_tp(device, "Host register S")
             cuda_host_register(self.ptr_s, self.tensor_s.numel(), flags = CUDA_HOST_REGISTER_PORTABLE)
 
         # Init global context
         if master:
-            log_tp(device, f"Initializing global context")
+            log_tp(device, "Initializing global context")
             ext.pg_init_context(self.ptr_g)
 
 
     def close(self):
         if not self.cpu:
-            log_tp(self.device, f"Host unregister G")
+            log_tp(self.device, "Host unregister G")
             cuda_host_unregister(self.ptr_g)
-            log_tp(self.device, f"Host unregister B")
+            log_tp(self.device, "Host unregister B")
             cuda_host_unregister(self.ptr_b)
-            log_tp(self.device, f"Host unregister R")
+            log_tp(self.device, "Host unregister R")
             cuda_host_unregister(self.ptr_r)
-            log_tp(self.device, f"Host unregister S")
+            log_tp(self.device, "Host unregister S")
             cuda_host_unregister(self.ptr_s)
         self.shm_g.close()
         log_tp(self.device, f"Closed {self.shm_g_name}")
@@ -289,13 +291,13 @@ class TPBackendNative:
         self.shm_s.close()
         log_tp(self.device, f"Closed {self.shm_s_name}")
         if self.master:
-            log_tp(self.device, f"Master unlink G")
+            log_tp(self.device, "Master unlink G")
             self.shm_g.unlink()
-            log_tp(self.device, f"Master unlink B")
+            log_tp(self.device, "Master unlink B")
             self.shm_b.unlink()
-            log_tp(self.device, f"Master unlink R")
+            log_tp(self.device, "Master unlink R")
             self.shm_r.unlink()
-            log_tp(self.device, f"Master unlink S")
+            log_tp(self.device, "Master unlink S")
             self.shm_s.unlink()
 
 
@@ -365,7 +367,7 @@ class TPBackendNative:
     ):
         if out_device == self.device:
             assert out_tensor is not None, \
-                f"Gather: Output device must supply output tensor"
+                "Gather: Output device must supply output tensor"
             assert out_tensor.shape[-1] == sum(ldims), \
                 f"Gather: Output tensor must match size of concatenated slices: {sum(ldims)}"
 

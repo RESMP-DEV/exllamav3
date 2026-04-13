@@ -1,7 +1,9 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from exllamav3 import Config, Model, Cache, Tokenizer, Generator, Job, TopPSampler
 from common import format_prompt, get_stop_conditions
+from exllamav3 import Cache, Config, Generator, Job, Model, Tokenizer, TopPSampler
 
 """
 A couple of examples showing uses of the generator

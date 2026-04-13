@@ -1,7 +1,11 @@
 from __future__ import annotations
-import torch
-import os, glob
+
+import glob
+import os
 from functools import lru_cache
+
+import torch
+
 from ..ext import exllamav3_ext as ext
 
 had_dict: dict[int: torch.Tensor] | None = {}
@@ -17,7 +21,7 @@ def load_constants():
     had_dict = {}
 
     for file_path in files:
-        with open(file_path, 'r') as file:
+        with open(file_path) as file:
             lines = file.readlines()
             lines = [line.strip() for line in lines if line.strip()]
             dim = len(lines)
@@ -27,7 +31,7 @@ def load_constants():
             had_dict[dim] = tensor
 
     prime_path = os.path.join(had_dir, "primes.txt")
-    with open(prime_path, "r") as f:
+    with open(prime_path) as f:
         lines = f.readlines()
         primes = set([int(line) for line in lines if line.strip()])
 

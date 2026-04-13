@@ -1,12 +1,14 @@
 import argparse
+import json
+import math
+from collections import defaultdict
+
 import torch
+import torch.nn.functional as F
+
 from .. import Config, Model, Tokenizer
 from ..util.progress import ProgressBar
 from .calibration_data import get_default_calibration
-import json
-import torch.nn.functional as F
-import math
-from collections import defaultdict
 
 col_default = "\u001b[0m"
 col_red = "\u001b[31;1m"
@@ -110,7 +112,7 @@ def prepare(args) -> (dict, dict, bool, str):
     job_state = {}
 
     warn_experimental = False
-    print(f"    Input directories:")
+    print("    Input directories:")
     for d in in_args["in_dir"]:
         print(f"    - {d}")
     print(f"    Output file: {in_args['out_file']}")
@@ -128,7 +130,7 @@ def prepare(args) -> (dict, dict, bool, str):
 
 
 def prepare_state(args, job_state, config, model, tokenizer):
-    print(f" -- Preparing input state")
+    print(" -- Preparing input state")
     state = get_default_calibration(args, tokenizer)
     return state[: args["cal_rows"]]
 
@@ -228,15 +230,15 @@ def main(args, job_state):
     dir_q = args["in_dir"]
     config_ref = Config.from_directory(dir_ref)
     config_q = [Config.from_directory(d) for d in dir_q]
-    print(f" -- Loaded model config")
+    print(" -- Loaded model config")
     print(f"    Architecture: {config_ref.architecture}")
     model_ref = Model.from_config(config_ref)
     model_q = [Model.from_config(c) for c in config_q]
-    print(f" -- Created model instances:")
+    print(" -- Created model instances:")
     r_layout = model_ref.get_layout_tree(4)
     print(r_layout)
     tokenizer = Tokenizer.from_config(config_ref)
-    print(f" -- Loaded tokenizer")
+    print(" -- Loaded tokenizer")
     print(f"    Vocab size: {tokenizer.actual_vocab_size}")
     num_q = len(model_q)
     num_cand = num_q - 1
@@ -500,10 +502,10 @@ def main(args, job_state):
     prefix = lcp(all_groups)
     print(" -- Results")
     print(
-        f"    idx      | parts                                                                |              d. bits |  d. KL-div"
+        "    idx      | parts                                                                |              d. bits |  d. KL-div"
     )
     print(
-        f"    ---------|----------------------------------------------------------------------|----------------------|-----------"
+        "    ---------|----------------------------------------------------------------------|----------------------|-----------"
     )
     print(
         f"       {col_blue}-{col_default}     |                                                                      |"

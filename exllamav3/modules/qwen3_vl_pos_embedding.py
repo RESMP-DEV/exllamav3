@@ -1,10 +1,12 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
 from torch import nn
+from typing_extensions import override
+
 from ..model.config import Config
-from . import Module
 from ..util.tensor import to2
+from . import Module
 
 
 class Qwen3VLPosEmbedding(Module):

@@ -1,11 +1,12 @@
 from __future__ import annotations
+
 import math
-import bisect
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-import re
+
 if TYPE_CHECKING:
-    from ..model import Model, Config
+    from ..model import Config, Model
 
 @dataclass
 class QTarget:
@@ -35,8 +36,8 @@ def create_q_strategy(
     head_bpw: int,
     hq: bool,
 ) -> (dict, float):
-    from ..modules.module import Module
     from ..modules.linear import Linear
+    from ..modules.module import Module
 
     base_bpw = int(math.floor(bpw))
     sum_numel = 0

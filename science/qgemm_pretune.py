@@ -1,13 +1,11 @@
-import sys, os
-from collections import OrderedDict
+import os
+import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import numpy as np
 import torch
 from exllamav3.ext import exllamav3_ext as ext
 from exllamav3.util import Timer
-from exllamav3.util.memory import free_mem
-from tabulate import tabulate
-import numpy as np
 
 num_warmup_passes = 10
 num_benchmark_iter_a = 20

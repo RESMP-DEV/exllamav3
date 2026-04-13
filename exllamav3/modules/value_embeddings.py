@@ -1,13 +1,11 @@
 from __future__ import annotations
-from typing_extensions import override
-import torch
+
 from torch.nn import functional as F
-from torch import nn
+from typing_extensions import override
+
 from ..model.config import Config
-from ..util.tensor import to2
-from . import Module, Linear
-from ..tokenizer.mm_embedding import FIRST_MM_EMBEDDING_INDEX
-from ..model.model_tp_alloc import TPAllocation
+from . import Module
+
 
 class ValueEmbeddings(Module):
     """CPU-resident value embeddings. Does all VE lookups at once during forward,

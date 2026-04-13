@@ -1,5 +1,6 @@
 from .custom import *
 
+
 class DefaultSampler(CustomSampler):
     """
     Sensible default for most models

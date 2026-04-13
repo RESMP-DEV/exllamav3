@@ -1,11 +1,14 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
+from typing_extensions import override
+
 from ..model.config import Config, no_default
 from ..model.model import Model
-from ..util.rope import RopeStyle
-from ..modules import RMSNorm, Embedding, TransformerBlock, Attention, GatedMLP, Linear
+from ..modules import Attention, Embedding, GatedMLP, Linear, RMSNorm, TransformerBlock
 from ..modules.attn import prepare_for_attn
+from ..util.rope import RopeStyle
+
 
 class Ernie4_5Config(Config):
     arch_string = "Ernie4_5_ForCausalLM"
@@ -153,5 +156,5 @@ class Ernie4_5Model(Model):
         if system_prompt:
             p += f"{system_prompt}\n"
         p += f"User: {prompt}\n"
-        p += f"Assistant: "
+        p += "Assistant: "
         return p

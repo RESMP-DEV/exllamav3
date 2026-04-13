@@ -1,4 +1,4 @@
-from exllamav3.conversion.convert_model import parser, main, prepare
+from exllamav3.conversion.convert_model import main, parser, prepare
 
 # Script included in package: ./exllamav3/conversion/convert_model.py
 

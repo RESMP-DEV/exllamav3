@@ -1,51 +1,45 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import argparse
+import gc
+import glob
+import json
+import math
+
+import matplotlib.pyplot as plt
 import torch
 import torch.nn.functional as F
-from exllamav3.util.file import disk_lru_cache, disk_lru_cache_clear
-from exllamav3.util.progress import ProgressBar
-from exllamav3.util.memory import free_mem
-from datasets import load_dataset
-import math
-import argparse
-import json
-import matplotlib.pyplot as plt
 from adjustText import adjust_text
-import glob
-from safetensors.torch import save_file
+from datasets import load_dataset
+from exllamav3.util.file import disk_lru_cache, disk_lru_cache_clear
+from exllamav3.util.memory import free_mem
+from exllamav3.util.progress import ProgressBar
 from safetensors import safe_open
-import gc
+from safetensors.torch import save_file
 
 torch.set_printoptions(precision = 5, sci_mode = False, linewidth = 200)
 
 # Lookup tables to ensure test functions are cacheable
 
-from compare_q_transformers import (
-    load_transformers_auto_bf16,
-    load_transformers_auto,
-    load_transformers,
-    fwd_transformers,
-    tokenize_transformers
-)
-from compare_q_exllamav2 import (
-    load_exllamav2,
-    fwd_exllamav2
-)
-from compare_q_exllamav3 import (
-    load_exllamav3,
-    fwd_exllamav3
-)
-from compare_q_llamacpp import (
-    load_llamacpp,
-    fwd_llamacpp
-)
 from compare_q_anyprecision import (
-    load_anyprecision,
     fwd_anyprecision,
+    load_anyprecision,
 )
+from compare_q_exllamav2 import fwd_exllamav2, load_exllamav2
+from compare_q_exllamav3 import fwd_exllamav3, load_exllamav3
+from compare_q_llamacpp import fwd_llamacpp, load_llamacpp
 from compare_q_qtip import (
-    load_qtip,
     fwd_qtip,
+    load_qtip,
+)
+from compare_q_transformers import (
+    fwd_transformers,
+    load_transformers,
+    load_transformers_auto,
+    load_transformers_auto_bf16,
+    tokenize_transformers,
 )
 
 load_fns = {
@@ -92,7 +86,7 @@ def save_tensor(tensor, filename: str):
     elif isinstance(tensor, list):
         save_file({f"tensor.{i}": t for i, t in enumerate(tensor)}, filename)
     else:
-        save_file({f"tensor": tensor}, filename)
+        save_file({"tensor": tensor}, filename)
 
 # Tokenize ppl test data
 
@@ -334,7 +328,7 @@ def dict_hash(x: dict) -> str:
 
 @torch.inference_mode()
 def main(args):
-    with open(args.dataspec, "r", encoding = "utf8") as f:
+    with open(args.dataspec, encoding = "utf8") as f:
         test_data_spec = json.load(f)
 
     models_files = args.modelspec
@@ -346,7 +340,7 @@ def main(args):
         else:
             models_files_g.append(filename)
     for filename in models_files_g:
-        with open(filename, "r", encoding = "utf8") as f:
+        with open(filename, encoding = "utf8") as f:
             m = json.load(f)
             models_spec += m
 

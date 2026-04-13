@@ -1,11 +1,14 @@
 from __future__ import annotations
-from typing import Callable
+
+from collections.abc import Callable
+
 import torch
+
 from ..util.memory import (
+    free_mem,
     set_memory_fraction_reserve,
     set_memory_fraction_use,
     unset_memory_fraction,
-    free_mem,
 )
 from ..util.progress import ProgressBar
 from .config import Config
@@ -25,7 +28,7 @@ class Model_LSMixin:
         modules: list,
         verbose: bool
     ):
-        with ProgressBar(f"Loading" if progressbar else None, len(modules)) as progress:
+        with ProgressBar("Loading" if progressbar else None, len(modules)) as progress:
             for idx, module in enumerate(modules):
                 defer = module.can_defer_load()
                 if defer:
@@ -66,7 +69,7 @@ class Model_LSMixin:
         touched_devices = []
         params = self.default_load_params(max_chunk_size)
 
-        with ProgressBar(f"Loading (LS)" if progressbar else None, len(modules)) as progress:
+        with ProgressBar("Loading (LS)" if progressbar else None, len(modules)) as progress:
 
             for idx, module in enumerate(modules):
 

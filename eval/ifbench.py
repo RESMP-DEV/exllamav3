@@ -1,17 +1,23 @@
 from __future__ import annotations
-import os, sys
+
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from exllamav3.util.file import disk_lru_cache
-from exllamav3 import model_init, Generator, Job, ComboSampler
-from exllamav3.util.progress import ProgressBar
 import argparse
+import json
+import random
+import time
+from collections import deque
 from pathlib import Path
-import torch
-import time, random, json
-from pathlib import Path
+
 # from datasets import load_dataset
 from urllib import request
-from collections import deque
+
+import torch
+from exllamav3 import Generator, Job, model_init
+from exllamav3.util.file import disk_lru_cache
+from exllamav3.util.progress import ProgressBar
 
 # ! Doesn't work, removes trailing whitespace from questions, which breaks the eval script
 # @disk_lru_cache("fetch_ifbench_test_data")
@@ -180,7 +186,7 @@ if __name__ == "__main__":
     # Validate args
     directory = os.path.dirname(args.output)
     if os.path.exists(args.output):
-        print(f" !! Warning: Output file exists and will be overwritten.")
+        print(" !! Warning: Output file exists and will be overwritten.")
 
     assert not (args.think and args.nothink), "Be nice"
     main(args)

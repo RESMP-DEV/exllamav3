@@ -1,9 +1,11 @@
 import argparse
-import torch
-from .. import Config, Model, Tokenizer
 import json
-from .compile import compile_model
+
+import torch
+
+from .. import Config, Model, Tokenizer
 from ..loader.safetensors import VariantSafetensorsCollection
+from .compile import compile_model
 
 col_default = "\u001b[0m"
 col_red = "\u001b[31;1m"
@@ -121,7 +123,7 @@ def main(args, job_state):
     torch.set_grad_enabled(False)
 
     # Load measurement
-    with open(args["measurement"], "r", encoding = "utf8") as f:
+    with open(args["measurement"], encoding = "utf8") as f:
         meas = json.load(f)
 
     # Get models
@@ -134,15 +136,15 @@ def main(args, job_state):
     num_q = len(dir_q)
     config_base = Config.from_directory(dir_base)
     config_q = [Config.from_directory(d) for d in dir_q]
-    print(f" -- Loaded model config")
+    print(" -- Loaded model config")
     print(f"    Architecture: {config_base.architecture}")
     model_base = Model.from_config(config_base)
     model_q = [Model.from_config(c) for c in config_q]
-    print(f" -- Created model instances:")
+    print(" -- Created model instances:")
     r_layout = model_base.get_layout_tree(4)
     print(r_layout)
     tokenizer = Tokenizer.from_config(config_base)
-    print(f" -- Loaded tokenizer")
+    print(" -- Loaded tokenizer")
     print(f"    Vocab size: {tokenizer.actual_vocab_size}")
 
     # Costs

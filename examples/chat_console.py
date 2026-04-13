@@ -1,12 +1,14 @@
-import sys, shutil
+import os
+import shutil
+import sys
+import time
+import unicodedata
 
-from rich.prompt import Prompt
-from rich.markdown import Markdown
-from rich.console import Console
 from prompt_toolkit import prompt as ptk_prompt
 from prompt_toolkit.formatted_text import ANSI
-import time, os
-import unicodedata
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.prompt import Prompt
 
 # ANSI codes
 ESC = "\u001b"
@@ -215,7 +217,8 @@ class KeyReader:
     def __enter__(self):
         try:
             if self._platform == 'posix':
-                import termios, tty
+                import termios
+                import tty
                 self._termios = termios
                 self._tty = tty
                 self._fd = sys.stdin.fileno()
@@ -270,7 +273,7 @@ class KeyReader:
             if r:
                 try:
                     ch = sys.stdin.read(1)
-                except (IOError, OSError):
+                except OSError:
                     return None
                 return (ch or "").lower() or None
             return None

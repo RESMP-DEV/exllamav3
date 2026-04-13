@@ -1,9 +1,11 @@
 from __future__ import annotations
+
 import torch
 from torch import nn
+
 from ...ext import exllamav3_ext as ext
 from ...util.tensor import to2
-from ...util import first_not_none
+
 
 class LinearFP16:
 

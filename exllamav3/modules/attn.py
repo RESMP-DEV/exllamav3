@@ -1,17 +1,18 @@
 from __future__ import annotations
-from typing_extensions import override
+
 import torch
 import torch.nn.functional as F
-from ..model.config import Config
-from ..util.rope import RopeSettings, RoPE
-from ..util.tensor import get_for_device, to2
-from . import Module, Linear, RMSNorm, LayerNorm
+from flash_attn import flash_attn_func, flash_attn_varlen_func, flash_attn_with_kvcache
+from typing_extensions import override
+
 from ..constants import PAGE_SIZE
-from flash_attn import flash_attn_func, flash_attn_with_kvcache, flash_attn_varlen_func
-from .multilinear import MultiLinear
 from ..ext import exllamav3_ext as ext
+from ..model.config import Config
 from ..model.model_tp_alloc import TPAllocation
-from ..util import profile_opt
+from ..util.rope import RoPE, RopeSettings
+from ..util.tensor import get_for_device, to2
+from . import LayerNorm, Linear, Module, RMSNorm
+from .multilinear import MultiLinear
 
 """
 SDPA:
@@ -55,13 +56,13 @@ Flash Attention:
 
 def prepare_sdpa_nc(input_ids: torch.Tensor, params: dict) -> torch.Tensor:
     assert "cache" not in params, \
-        f"Cache provided for attn_mode: sdpa_nc"
+        "Cache provided for attn_mode: sdpa_nc"
     return input_ids
 
 
 def prepare_flash_attn_nc(input_ids: torch.Tensor, params: dict) -> torch.Tensor:
     assert "cache" not in params, \
-        f"Cache provided for attn_mode: sdpa_nc"
+        "Cache provided for attn_mode: sdpa_nc"
     return input_ids
 
 

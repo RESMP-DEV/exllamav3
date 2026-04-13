@@ -1,13 +1,19 @@
 from __future__ import annotations
-import sys, os
+
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from exllamav3 import model_init, Generator, Job
 import argparse
+import math
+import random
+
 import torch
-import random, math
 from datasets import load_dataset
+from exllamav3 import Generator, Job, model_init
 from exllamav3.util.file import disk_lru_cache
 from exllamav3.util.progress import ProgressBar
+
 
 @disk_lru_cache("get_dataset_mmlu")
 def get_dataset_mmlu(split):
@@ -127,7 +133,7 @@ def main(args):
         correct = 0
         confidence_sum = 0.0
         for q in dataset_all:
-            if not "answer_correct" in q:
+            if "answer_correct" not in q:
                 continue
             if p_subject is not None and q["subject"] != p_subject:
                 continue

@@ -1,12 +1,16 @@
 from __future__ import annotations
-from abc import ABC, abstractmethod
-import torch
+
 import os
+from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
+
+import torch
+
 if TYPE_CHECKING:
     from ..model.config import Config
-from ..model.model_tp_alloc import TPAllocation
 from functools import cached_property
+
+from ..model.model_tp_alloc import TPAllocation
 
 # Use host bounce when moving state from device to device in layer split
 no_p2p_copy = os.environ.get('EXLLAMA_NO_P2P_COPY', None)

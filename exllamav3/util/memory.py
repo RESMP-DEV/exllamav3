@@ -1,8 +1,9 @@
-from dataclasses import dataclass
-from collections import deque
-import torch
 import gc
 import sys
+from collections import deque
+from dataclasses import dataclass
+
+import torch
 from pydantic import PydanticUserError
 
 # @lru_cache
@@ -72,6 +73,7 @@ def list_gpu_tensors(min_size: int = 1, cuda_only: bool = True):
 
     import threading
     import warnings
+
     from tabulate import tabulate
 
     # Suppress FutureWarning from Torch every time we try to access certain objects
@@ -219,9 +221,9 @@ def list_gpu_tensors(min_size: int = 1, cuda_only: bool = True):
     # Print tables to console
     for k in sorted(devices.keys()):
         print()
-        print(f"--------------")
+        print("--------------")
         print(f"| {k:10} |")
-        print(f"--------------")
+        print("--------------")
         print()
         headers = ["size // MB", "path", "shape", "dtype"]
         print(tabulate(devices[k], headers = headers, tablefmt = "github", intfmt=","))

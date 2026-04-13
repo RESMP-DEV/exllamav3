@@ -1,13 +1,19 @@
-from .filter import Filter
-from ...tokenizer import Tokenizer
-import torch
 from functools import lru_cache
+
+import torch
+
+from ...tokenizer import Tokenizer
+from .filter import Filter
 
 try:
     import kbnf
-    from formatron.integrations.utils import get_original_characters, default_mask_logits_fn, get_bit_mask
-    from formatron.formatter import FormatterBuilder
     from formatron.config import EngineGenerationConfig
+    from formatron.formatter import FormatterBuilder
+    from formatron.integrations.utils import (
+        default_mask_logits_fn,
+        get_bit_mask,
+        get_original_characters,
+    )
     formatron_available = True
 except ModuleNotFoundError:
     formatron_available = False

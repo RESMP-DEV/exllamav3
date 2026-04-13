@@ -1,21 +1,24 @@
 from __future__ import annotations
+
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
 import torch
-from ..model.model import Model
+
 from ..cache.cache import Cache
 from ..cache.recurrent import RecurrentCache
-from ..tokenizer.tokenizer import Tokenizer
 from ..constants import PAGE_SIZE
+from ..model.model import Model
+from ..tokenizer import MMEmbedding
+from ..tokenizer.tokenizer import Tokenizer
 from ..util import cuda_sync_active
-from .pagetable import PageTable
-from .job import Job
 from .filter import Filter
-from concurrent.futures import ThreadPoolExecutor
+from .job import Job
+from .pagetable import PageTable
 from .sampler import Sampler
 from .visualizer import CacheVisualizer
-import time
-import threading
-from ..tokenizer import MMEmbedding
-from ..util import profile_opt
+
 
 class Generator:
 

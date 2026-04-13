@@ -1,6 +1,9 @@
 from __future__ import annotations
+
 import torch
+
 from . import Linear
+
 
 class MultiLinear:
     def __init__(

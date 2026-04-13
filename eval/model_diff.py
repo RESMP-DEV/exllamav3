@@ -1,19 +1,23 @@
-import sys, os
+import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import argparse
-from exllamav3.util.file import disk_lru_cache
-from exllamav3.util.progress import ProgressBar
-from exllamav3.util.memory import free_mem
-from exllamav3.util.measures import cosine_error, sqnr
-from exllamav3 import Config, Model, Tokenizer
-from exllamav3.loader import SafetensorsCollection, VariantSafetensorsCollection
-from datasets import load_dataset
+import math
+
 import torch
 import torch.nn.functional as F
-import math
 import yaml
+from datasets import load_dataset
+from exllamav3 import Config, Model, Tokenizer
+from exllamav3.loader import SafetensorsCollection, VariantSafetensorsCollection
+from exllamav3.util.file import disk_lru_cache
+from exllamav3.util.measures import cosine_error, sqnr
+from exllamav3.util.memory import free_mem
+from exllamav3.util.progress import ProgressBar
 from safetensors.torch import save_file
+
 
 def save_tensor(tensor, path: str, tensor_name: str = None):
     if isinstance(tensor, dict):
@@ -26,7 +30,7 @@ def save_tensor(tensor, path: str, tensor_name: str = None):
         }, path)
     else:
         save_file({
-            tensor_name or f"tensor": tensor
+            tensor_name or "tensor": tensor
         }, path)
 
 
@@ -88,7 +92,7 @@ def main(args):
 
     # Override tensors
     if args.override:
-        with open(args.override, "r") as f:
+        with open(args.override) as f:
             comp = yaml.safe_load(f)
         sources = {s["id"]: s["model_dir"] for s in comp["sources"]}
         overrides = {o["key"]: sources[o["source"]] for o in comp["overrides"]}
@@ -284,17 +288,17 @@ def main(args):
     print(f" -- B perplexity: {perplexity[1]:11.8f}")
 
     # Probability of the test label being in the top K tokens, for each model
-    print(f" -- A label in top-K:")
+    print(" -- A label in top-K:")
     for t in range(topk_max):
         a_acc_ = topk_hits_sum[0][t] / topk_hits_count[0][t]
         print(f"      K = {t+1}: {a_acc_:6.4f}")
-    print(f" -- B label in top-K:")
+    print(" -- B label in top-K:")
     for t in range(topk_max):
         a_acc_ = topk_hits_sum[1][t] / topk_hits_count[1][t]
         print(f"      K = {t+1}: {a_acc_:6.4f}")
 
     # Probability of exact top-K token match between models
-    print(f" -- Top-K agreement, A vs B:")
+    print(" -- Top-K agreement, A vs B:")
     for t in range(topk_max):
         topk_agree_ = topk_agreement_sum[t] / topk_agreement_count[t]
         print(f"      K = {t+1}: {topk_agree_:6.4f}")

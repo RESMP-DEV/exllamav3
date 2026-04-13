@@ -1,31 +1,36 @@
 from __future__ import annotations
-from typing_extensions import override
-import os, json
+
+import json
+import os
+from types import SimpleNamespace
+
 import numpy as np
 import torch
 import torch.nn.functional as F
+from PIL import Image
+from typing_extensions import override
+
 from ..model.config import Config
 from ..model.model import Model
-from ..util.rope import RopeStyle
-from ..util.file import read_dict, no_default
-from ..util.vision import convert_to_rgb, normalize_image
 from ..modules import (
-    Module,
-    RMSNorm,
-    Embedding,
-    TransformerBlock,
-    Attention,
-    GatedMLP,
-    Linear,
-    Conv,
-    PosEmbedding,
     MLP,
-    LayerNorm
+    Attention,
+    Conv,
+    Embedding,
+    GatedMLP,
+    LayerNorm,
+    Linear,
+    Module,
+    PosEmbedding,
+    RMSNorm,
+    TransformerBlock,
 )
 from ..modules.attn import prepare_for_attn
-from ..tokenizer import Tokenizer, MMEmbedding
-from types import SimpleNamespace
-from PIL import Image
+from ..tokenizer import MMEmbedding, Tokenizer
+from ..util.file import no_default, read_dict
+from ..util.rope import RopeStyle
+from ..util.vision import convert_to_rgb, normalize_image
+
 
 class Gemma3Config(Config):
     arch_string = "Gemma3ForConditionalGeneration"
@@ -364,7 +369,7 @@ class Gemma3Model(Model):
         if system_prompt:
             p += "{system_prompt}\n\n"
         p += f"{prompt}\n"
-        p += f"<start_of_turn>model\n"
+        p += "<start_of_turn>model\n"
         return p
 
 
@@ -519,12 +524,12 @@ class Gemma3VisionModel(Model):
         self.modules += [
             LayerNorm(
                 config = config,
-                key = key_prefix + f"vision_model.post_layernorm",
+                key = key_prefix + "vision_model.post_layernorm",
                 layernorm_eps = config.vision.layernorm_eps
             ),
             Gemma3MMPool(
                 config = config,
-                key = key_prefix + f"vision_model.mm_pool",
+                key = key_prefix + "vision_model.mm_pool",
                 patches_per_image = int(config.vision.image_size // config.vision.patch_size),
                 tokens_per_side = int(config.vision.mm_tokens_per_image ** 0.5)
             ),

@@ -1,16 +1,19 @@
 import os
 from dataclasses import dataclass
-from typing import Optional, List
 
 import torch
 import torch.nn
-from transformers.quantizers.auto import HfQuantizer
+from transformers.quantizers.auto import (
+    AUTO_QUANTIZATION_CONFIG_MAPPING,
+    AUTO_QUANTIZER_MAPPING,
+    HfQuantizer,
+)
 from transformers.quantizers.base import QuantizationConfigMixin
-from transformers.quantizers.auto import AUTO_QUANTIZER_MAPPING, AUTO_QUANTIZATION_CONFIG_MAPPING
 from transformers.utils.quantization_config import QuantizationMethod
 
 from exllamav3.loader import SafetensorsCollection
 from exllamav3.modules.quant.exl3 import LinearEXL3
+
 
 class Exl3HfLinear(torch.nn.Module):
     """
@@ -221,7 +224,7 @@ class Exl3HfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model,
-        keep_in_fp32_modules: Optional[List[str]] = None,
+        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         # Get list of modules to replace and create their replacements (with meta tensors)

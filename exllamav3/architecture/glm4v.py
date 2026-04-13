@@ -1,31 +1,35 @@
 from __future__ import annotations
-from typing_extensions import override
+
+import json
+import os
+from types import SimpleNamespace
+from typing import TYPE_CHECKING
+
 import numpy as np
 import torch
 import torch.nn.functional as F
+from PIL import Image
+from typing_extensions import override
+
 from ..model.config import Config
 from ..model.model import Model
-from ..util.rope import RopeStyle, position_embedding_grid_2d, RopeSettings
-from ..util.file import read_dict, no_default
-from ..util.vision import convert_to_rgb, normalize_image, smart_resize
 from ..modules import (
+    Attention,
+    Conv,
+    GatedMLP,
+    Glm4VPosEmbedding,
+    LayerNorm,
+    Linear,
     Module,
     RMSNorm,
     TransformerBlock,
-    Attention,
-    GatedMLP,
-    Linear,
-    Conv,
-    LayerNorm,
-    Glm4VPosEmbedding,
 )
+from ..tokenizer import MMEmbedding, Tokenizer
+from ..util.file import no_default, read_dict
+from ..util.rope import RopeSettings, RopeStyle, position_embedding_grid_2d
+from ..util.vision import convert_to_rgb, normalize_image, smart_resize
 from .glm4 import Glm4Model
-from types import SimpleNamespace
-from ..tokenizer import Tokenizer, MMEmbedding
-from PIL import Image
-import os, json
 
-from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .glm4v_moe import Glm4VMoeConfig
 
