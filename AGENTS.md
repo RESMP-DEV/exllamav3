@@ -46,3 +46,7 @@ Prefer targeted validation:
 - conversion changes should exercise `convert.py`,
 - runtime or backend changes should exercise a focused example or test,
 - and architecture-support changes should update the relevant support lists and example assumptions.
+
+## Change log expectations
+
+Update `CHANGELOG.md` when a change affects model support, conversion behavior, runtime behavior, installation guidance, or validation expectations. Keep entries concise and summarize the effect of upstream syncs instead of mirroring commit history.
